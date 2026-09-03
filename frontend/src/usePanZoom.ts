@@ -1,14 +1,18 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type PointerEvent } from 'react'
 
-// k=1 is the full plot (current default). That is now the farthest you can zoom out.
 const MIN_K = 2
 const MAX_K = 80
 const INITIAL_K = 10
-// Fraction of plot size. Positive X is right (east); negative Y is up (north).
 const INITIAL_X = 0.12
 const INITIAL_Y = -0.12
 
-function centeredView(width, height, k) {
+type View = {
+  x: number
+  y: number
+  k: number
+}
+
+function centeredView(width: number, height: number, k: number): View {
   const focusX = width * (0.5 + INITIAL_X)
   const focusY = height * (0.5 + INITIAL_Y)
   return {
@@ -18,17 +22,21 @@ function centeredView(width, height, k) {
   }
 }
 
-function clientToSvg(svg, clientX, clientY) {
+function clientToSvg(
+  svg: SVGSVGElement,
+  clientX: number,
+  clientY: number,
+): { x: number; y: number } {
   const ctm = svg.getScreenCTM()
   if (!ctm) return { x: 0, y: 0 }
   return new DOMPoint(clientX, clientY).matrixTransform(ctm.inverse())
 }
 
 export function usePanZoom(width = 0, height = 0) {
-  const [svg, setSvg] = useState(null)
-  const [view, setView] = useState({ x: 0, y: 0, k: INITIAL_K })
+  const [svg, setSvg] = useState<SVGSVGElement | null>(null)
+  const [view, setView] = useState<View>({ x: 0, y: 0, k: INITIAL_K })
   const [panning, setPanning] = useState(false)
-  const drag = useRef(null)
+  const drag = useRef<{ x: number; y: number } | null>(null)
 
   useEffect(() => {
     if (!width || !height) return
@@ -38,7 +46,7 @@ export function usePanZoom(width = 0, height = 0) {
   useEffect(() => {
     if (!svg) return
 
-    const onWheel = (e) => {
+    const onWheel = (e: WheelEvent) => {
       e.preventDefault()
       const p = clientToSvg(svg, e.clientX, e.clientY)
       const factor = Math.exp(-e.deltaY * 0.0015)
@@ -57,14 +65,14 @@ export function usePanZoom(width = 0, height = 0) {
     return () => svg.removeEventListener('wheel', onWheel)
   }, [svg])
 
-  const onPointerDown = (e) => {
+  const onPointerDown = (e: PointerEvent<SVGSVGElement>) => {
     if (e.button !== 0) return
     e.currentTarget.setPointerCapture(e.pointerId)
     drag.current = clientToSvg(e.currentTarget, e.clientX, e.clientY)
     setPanning(true)
   }
 
-  const onPointerMove = (e) => {
+  const onPointerMove = (e: PointerEvent<SVGSVGElement>) => {
     if (!drag.current) return
     const p = clientToSvg(e.currentTarget, e.clientX, e.clientY)
     const dx = p.x - drag.current.x

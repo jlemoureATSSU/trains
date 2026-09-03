@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { LINE_COLORS, darken, routeColor, stationColors } from './colors'
 import { projectPlot, snapToRoute } from './geo'
+import type { Line, PlottedStation, Point, Vehicle } from './types'
 import { usePanZoom } from './usePanZoom'
 import './App.css'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL
 
-function StationDot({ station }) {
+function StationDot({ station }: { station: PlottedStation }) {
   const colors = stationColors(station.lines)
   if (colors.length === 0) return null
 
@@ -30,7 +31,7 @@ function StationDot({ station }) {
   )
 }
 
-function VehicleMark({ vehicle }) {
+function VehicleMark({ vehicle }: { vehicle: Vehicle & Point }) {
   const color = routeColor(vehicle.route)
   return (
     <g transform={`translate(${vehicle.x} ${vehicle.y})`}>
@@ -49,9 +50,9 @@ function VehicleMark({ vehicle }) {
 }
 
 function App() {
-  const [lines, setLines] = useState([])
-  const [vehicles, setVehicles] = useState([])
-  const [error, setError] = useState(null)
+  const [lines, setLines] = useState<Line[]>([])
+  const [vehicles, setVehicles] = useState<Vehicle[]>([])
+  const [error, setError] = useState<string | null>(null)
   const plot = projectPlot(lines)
   const { ref, view, panning, onPointerDown, onPointerMove, onPointerUp } =
     usePanZoom(plot.width, plot.height)
@@ -60,10 +61,10 @@ function App() {
     fetch(`${API_BASE}/lines`)
       .then((res) => {
         if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
-        return res.json()
+        return res.json() as Promise<Line[]>
       })
       .then(setLines)
-      .catch((err) => setError(err.message))
+      .catch((err: Error) => setError(err.message))
   }, [])
 
   useEffect(() => {
@@ -72,7 +73,7 @@ function App() {
       fetch(`${API_BASE}/vehicles?route_type=0,1,2`)
         .then((res) => {
           if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
-          return res.json()
+          return res.json() as Promise<Vehicle[]>
         })
         .then((data) => {
           if (!cancelled) setVehicles(data)
@@ -88,7 +89,10 @@ function App() {
   }, [])
 
   const vehicleMarks = vehicles
-    .filter((v) => Number.isFinite(v.latitude) && Number.isFinite(v.longitude))
+    .filter(
+      (v): v is Vehicle & { latitude: number; longitude: number } =>
+        Number.isFinite(v.latitude) && Number.isFinite(v.longitude),
+    )
     .map((v) => {
       const pos = plot.project({ lat: v.latitude, lon: v.longitude })
       return {

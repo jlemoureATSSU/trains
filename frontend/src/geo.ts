@@ -1,22 +1,32 @@
-// Fit lat/lon into a rectangle without stretching.
-// Longitude degrees are shorter than latitude at Boston (~42°N),
-// so we scale lon by cos(mean lat) before mapping to pixels.
+import type {
+  LatLon,
+  Line,
+  LinePoint,
+  MapStation,
+  Plot,
+  Point,
+  Segment,
+} from './types'
 
-function isCommuter(route) {
+function isCommuter(route: string | null | undefined): boolean {
   return (route || '').toLowerCase().startsWith('cr-')
 }
 
-function stationsFromLines(lines) {
-  const byName = new Map()
+function nameKey(name: string | null | undefined): string {
+  return (name || '').toLowerCase()
+}
+
+function stationsFromLines(lines: Line[]): MapStation[] {
+  const byName = new Map<string, MapStation>()
   for (const line of lines) {
     for (const point of line.points ?? []) {
       if (!Number.isFinite(point.lat) || !Number.isFinite(point.lon)) continue
-      const key = (point.name || '').toLowerCase()
+      const key = nameKey(point.name)
       if (!key) continue
       let station = byName.get(key)
       if (!station) {
         station = {
-          name: point.name,
+          name: point.name ?? key,
           lat: point.lat,
           lon: point.lon,
           lines: [],
@@ -36,12 +46,16 @@ function stationsFromLines(lines) {
   return [...byName.values()]
 }
 
-function projector(coords, paddingFrac = 0.05) {
+function projector(coords: LatLon[], paddingFrac = 0.05) {
   const points = coords.filter(
     (s) => Number.isFinite(s.lat) && Number.isFinite(s.lon),
   )
   if (points.length === 0) {
-    return { width: 0, height: 0, project: () => ({ x: 0, y: 0 }) }
+    return {
+      width: 0,
+      height: 0,
+      project: (): Point => ({ x: 0, y: 0 }),
+    }
   }
 
   const lats = points.map((s) => s.lat)
@@ -63,24 +77,25 @@ function projector(coords, paddingFrac = 0.05) {
   return {
     width,
     height,
-    project: (s) => ({
+    project: (s: LatLon): Point => ({
       x: pad + (s.lon * lonScale - minX),
       y: pad + (maxLat - s.lat),
     }),
   }
 }
 
-function nameKey(name) {
-  return (name || '').toLowerCase()
-}
-
-function usablePoints(points) {
+function usablePoints(points: LinePoint[] | undefined): LinePoint[] {
   return (points ?? []).filter(
-    (p) => p.name && Number.isFinite(p.lat) && Number.isFinite(p.lon),
+    (p): p is LinePoint & { name: string } =>
+      Boolean(p.name) && Number.isFinite(p.lat) && Number.isFinite(p.lon),
   )
 }
 
-function subpath(points, a, b) {
+function subpath(
+  points: LinePoint[],
+  a: string,
+  b: string,
+): LinePoint[] | null {
   const keys = points.map((p) => nameKey(p.name))
   const i = keys.indexOf(a)
   const j = keys.indexOf(b)
@@ -88,9 +103,7 @@ function subpath(points, a, b) {
   return i < j ? points.slice(i, j + 1) : points.slice(j, i + 1).reverse()
 }
 
-// If another line stops at A…B with stations in between, follow that path
-// so skip-stop CR does not cut the chord. Those extras are draw-only.
-function threadCommuter(lines) {
+function threadCommuter(lines: Line[]): Line[] {
   const guides = lines
     .filter((line) => !isCommuter(line.route))
     .map((line) => usablePoints(line.points))
@@ -105,7 +118,7 @@ function threadCommuter(lines) {
     for (let i = 0; i < points.length - 1; i++) {
       const a = nameKey(points[i].name)
       const b = nameKey(points[i + 1].name)
-      let detour = null
+      let detour: LinePoint[] | null = null
       for (const guide of guides) {
         const path = subpath(guide, a, b)
         if (path && path.length > 2 && (!detour || path.length > detour.length)) {
@@ -118,12 +131,13 @@ function threadCommuter(lines) {
   })
 }
 
-export function projectPlot(lines) {
+export function projectPlot(lines: Line[]): Plot {
   const stations = stationsFromLines(lines)
   const byName = new Map(stations.map((s) => [s.name.toLowerCase(), s]))
   const { width, height, project } = projector(stations)
   const drawn = threadCommuter(lines)
-  const crFirst = (a, b) => Number(isCommuter(b.route)) - Number(isCommuter(a.route))
+  const crFirst = (a: Line, b: Line) =>
+    Number(isCommuter(b.route)) - Number(isCommuter(a.route))
 
   const projectedLines = drawn.sort(crFirst).map((line) => ({
     ...line,
@@ -134,7 +148,7 @@ export function projectPlot(lines) {
     }),
   }))
 
-  const segmentsByRoute = new Map()
+  const segmentsByRoute = new Map<string, Segment[]>()
   for (const line of projectedLines) {
     if (!line.route || line.points.length < 2) continue
     const segs = segmentsByRoute.get(line.route) ?? []
@@ -156,7 +170,7 @@ export function projectPlot(lines) {
   }
 }
 
-function nearestOnSegments(x, y, segments) {
+function nearestOnSegments(x: number, y: number, segments: Segment[]): Point {
   let bestX = x
   let bestY = y
   let best = Infinity
@@ -180,7 +194,13 @@ function nearestOnSegments(x, y, segments) {
   return { x: bestX, y: bestY }
 }
 
-export function snapToRoute(x, y, route, segmentsByRoute) {
+export function snapToRoute(
+  x: number,
+  y: number,
+  route: string | null | undefined,
+  segmentsByRoute: Map<string, Segment[]>,
+): Point {
+  if (!route) return { x, y }
   const segments = segmentsByRoute.get(route)
   if (!segments?.length) return { x, y }
   return nearestOnSegments(x, y, segments)
