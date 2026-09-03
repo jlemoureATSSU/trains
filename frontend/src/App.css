@@ -1,0 +1,78 @@
+body {
+  margin: 0;
+}
+
+.page {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.status {
+  position: absolute;
+  inset: 16px 16px auto;
+  margin: 0;
+  color: #666;
+}
+
+.plot {
+  --dot-r: 0.035%;
+  --dot-stroke: 0.02%;
+  --dot-ring-gap: 0.2%;
+  --dot-ring-step: 0.01%;
+  --line-stroke: 0.03%;
+  --vehicle-r: 0.00045;
+  --vehicle-stroke: 0.2;
+
+  display: block;
+  height: 100vh;
+  width: 100vw;
+  background: #f4f4f5;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.plot.is-panning {
+  cursor: grabbing;
+}
+
+.line {
+  fill: none;
+  stroke-width: var(--line-stroke);
+}
+
+.vehicle {
+  transform-origin: 0 0;
+  scale: var(--vehicle-r);
+  stroke-width: var(--vehicle-stroke);
+  stroke-linejoin: round;
+}
+
+.dot--0 {
+  r: var(--dot-r);
+}
+
+.dot--1 {
+  r: calc(var(--dot-r) + var(--dot-ring-step));
+  fill: none;
+  stroke-width: var(--dot-stroke);
+}
+
+.dot--2 {
+  r: calc(var(--dot-r) + var(--dot-ring-step) * 2);
+  fill: none;
+  stroke-width: var(--dot-stroke);
+}
+
+.dot--3 {
+  r: calc(var(--dot-r) + var(--dot-ring-step) * 3);
+  fill: none;
+  stroke-width: var(--dot-stroke);
+}
+
+.dot--4 {
+  r: calc(var(--dot-r) + var(--dot-ring-step) * 4);
+  fill: none;
+  stroke-width: var(--dot-stroke);
+}

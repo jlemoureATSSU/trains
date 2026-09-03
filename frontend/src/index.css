@@ -1,0 +1,17 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+body {
+  font-family: system-ui, sans-serif;
+  color: #111;
+  background: #fff;
+}
