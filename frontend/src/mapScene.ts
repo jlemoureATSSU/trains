@@ -1,4 +1,4 @@
-import type { Map as MaplibreMap, SkySpecification } from 'maplibre-gl'
+import type { Map as MaplibreMap } from 'maplibre-gl'
 
 const BUILDING_LAYER = 'mbta-3d-buildings'
 const TERRAIN_SOURCE = 'mbta-terrain'
@@ -140,24 +140,4 @@ export function applyMapScene(map: MaplibreMap, scene: MapScene) {
   } catch {
     // Style swaps can race addLayer/addSource; the next idle pass retries.
   }
-}
-
-export const GLOBE_SKY: SkySpecification = {
-  'sky-color': '#0b1220',
-  'horizon-color': '#243044',
-  'fog-color': '#1a2433',
-  'fog-ground-blend': 0.45,
-  'horizon-fog-blend': 0.55,
-  'sky-horizon-blend': 0.75,
-  'atmosphere-blend': [
-    'interpolate',
-    ['linear'],
-    ['zoom'],
-    2,
-    0.85,
-    8,
-    0.18,
-    12,
-    0.04,
-  ],
 }

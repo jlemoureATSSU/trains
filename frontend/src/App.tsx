@@ -4,7 +4,7 @@ import { MAP_STYLES, MapControls, LINE_MODES, type LineMode, type MapStyleId } f
 import { StationMark } from '@/components/StationMark'
 import { VehicleMark } from '@/components/VehicleMark'
 import { linesToGeoJSON, lineLabelsToGeoJSON, prepareMap } from './geo'
-import { applyMapScene, GLOBE_SKY } from './mapScene'
+import { applyMapScene } from './mapScene'
 import type { Line, Vehicle } from './types'
 import { useVehicleMotion, VEHICLE_POLL_MS } from './useVehicleMotion'
 import 'maplibre-gl/dist/maplibre-gl.css'
@@ -140,7 +140,6 @@ function App() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [error, setError] = useState<string | null>(null)
   const [styleId, setStyleId] = useState<MapStyleId>('dark')
-  const [globe, setGlobe] = useState(true)
   const [terrain, setTerrain] = useState(false)
   const [buildings, setBuildings] = useState(false)
   const [labels, setLabels] = useState(true)
@@ -213,12 +212,10 @@ function App() {
           pitch={viewState.pitch}
           bearing={viewState.bearing}
           onStyleChange={setStyleId}
-          globe={globe}
           terrain={terrain}
           buildings={buildings}
           labels={labels}
           lineMode={lineMode}
-          onGlobeChange={setGlobe}
           onTerrainChange={setTerrain}
           onBuildingsChange={setBuildings}
           onLabelsChange={setLabels}
@@ -252,8 +249,6 @@ function App() {
           onMove={(event) => setViewState(event.viewState)}
           onIdle={(event) => applyMapScene(event.target, scene)}
           mapStyle={MAP_STYLES[styleId].url}
-          projection={globe ? 'globe' : 'mercator'}
-          sky={globe ? GLOBE_SKY : undefined}
           canvasContextAttributes={{ antialias: true }}
           style={{ width: '100%', height: '100%' }}
         >

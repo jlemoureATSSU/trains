@@ -21,6 +21,7 @@ type Track = {
   startedAt: number
   duration: number
   heading: number
+  onLine: boolean
 }
 
 function isStopped(status?: string) {
@@ -58,6 +59,7 @@ function at(track: Track, now: number): LatLon {
 
 export function useVehicleMotion(vehicles: Vehicle[], plot: Plot): MovingVehicle[] {
   const tracks = useRef(new Map<string, Track>())
+  const segmentsRef = useRef(plot.segmentsByRoute)
   const [now, setNow] = useState(() => performance.now())
 
   const snapped = useMemo(
@@ -81,11 +83,17 @@ export function useVehicleMotion(vehicles: Vehicle[], plot: Plot): MovingVehicle
   useLayoutEffect(() => {
     const t = performance.now()
     const seen = new Set<string>()
+    const plotChanged = segmentsRef.current !== plot.segmentsByRoute
+    segmentsRef.current = plot.segmentsByRoute
+    let jumped = false
 
     for (const vehicle of snapped) {
       seen.add(vehicle.id)
       const target = { lat: vehicle.lat, lon: vehicle.lon }
       const prev = tracks.current.get(vehicle.id)
+      const onLine = Boolean(
+        vehicle.route && plot.segmentsByRoute.get(vehicle.route)?.length,
+      )
 
       if (!prev) {
         tracks.current.set(vehicle.id, {
@@ -94,28 +102,35 @@ export function useVehicleMotion(vehicles: Vehicle[], plot: Plot): MovingVehicle
           startedAt: t,
           duration: 0,
           heading: headingFor(target, target, vehicle, plot, null),
+          onLine,
         })
         continue
       }
 
       if (!movedSince(prev.to, target, 15)) {
         prev.heading = headingFor(prev.from, prev.to, vehicle, plot, prev.heading)
+        prev.onLine = onLine
         continue
       }
 
-      const current = at(prev, t)
+      const instant = plotChanged || (onLine && !prev.onLine)
+      const current = instant ? target : at(prev, t)
       tracks.current.set(vehicle.id, {
         from: current,
         to: target,
         startedAt: t,
-        duration: VEHICLE_POLL_MS,
+        duration: instant ? 0 : VEHICLE_POLL_MS,
         heading: headingFor(current, target, vehicle, plot, prev.heading),
+        onLine,
       })
+      if (instant) jumped = true
     }
 
     for (const id of tracks.current.keys()) {
       if (!seen.has(id)) tracks.current.delete(id)
     }
+
+    if (jumped) setNow(t)
   }, [snapped, plot])
 
   useEffect(() => {

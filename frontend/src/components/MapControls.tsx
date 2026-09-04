@@ -1,7 +1,6 @@
 import {
   Building2,
   Compass,
-  Globe,
   LocateFixed,
   Menu,
   Mountain,
@@ -123,7 +122,7 @@ function ToggleTile({
 }: {
   active: boolean
   label: string
-  icon: typeof Globe
+  icon: typeof Building2
   onClick: () => void
 }) {
   return (
@@ -147,7 +146,6 @@ type MapControlsProps = {
   styleId: MapStyleId
   pitch: number
   bearing: number
-  globe: boolean
   terrain: boolean
   buildings: boolean
   labels: boolean
@@ -155,7 +153,6 @@ type MapControlsProps = {
   onStyleChange: (styleId: MapStyleId) => void
   onPitchChange: (pitch: number) => void
   onBearingChange: (bearing: number) => void
-  onGlobeChange: (globe: boolean) => void
   onTerrainChange: (terrain: boolean) => void
   onBuildingsChange: (buildings: boolean) => void
   onLabelsChange: (labels: boolean) => void
@@ -168,7 +165,6 @@ export function MapControls({
   styleId,
   pitch,
   bearing,
-  globe,
   terrain,
   buildings,
   labels,
@@ -176,7 +172,6 @@ export function MapControls({
   onStyleChange,
   onPitchChange,
   onBearingChange,
-  onGlobeChange,
   onTerrainChange,
   onBuildingsChange,
   onLabelsChange,
@@ -303,12 +298,6 @@ export function MapControls({
           </div>
 
           <div className="mt-3 grid grid-cols-2 gap-1.5 px-3">
-            <ToggleTile
-              active={globe}
-              label="Globe"
-              icon={Globe}
-              onClick={() => onGlobeChange(!globe)}
-            />
             <ToggleTile
               active={terrain}
               label="Terrain"
