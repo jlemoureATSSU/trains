@@ -68,7 +68,12 @@ function uniqueNexts(here: LatLon, candidates: { name: string; lat: number; lon:
     const miles = milesBetween(here, next)
     const prev = byName.get(key)
     if (!prev || miles < prev.miles) {
-      byName.set(key, { name: next.name, miles })
+      byName.set(key, {
+        name: next.name,
+        miles,
+        lat: next.lat,
+        lon: next.lon,
+      })
     }
   }
   return [...byName.values()]
@@ -253,6 +258,7 @@ export function linesToGeoJSON(lines: Line[]) {
         properties: {
           color: line.color,
           commuter: isCommuter(line.route) ? 1 : 0,
+          route: line.route ?? '',
         },
         geometry: {
           type: 'LineString' as const,
@@ -304,7 +310,7 @@ export function lineLabelsToGeoJSON(lines: Line[]) {
 
   const features: {
     type: 'Feature'
-    properties: { name: string; color: string; commuter: number }
+    properties: { name: string; color: string; commuter: number; route: string }
     geometry: { type: 'LineString'; coordinates: number[][] }
   }[] = []
   const placed: { name: string; lat: number; lon: number }[] = []
@@ -350,6 +356,7 @@ export function lineLabelsToGeoJSON(lines: Line[]) {
             name,
             color: line.color,
             commuter: isCommuter(line.route) ? 1 : 0,
+            route: line.route ?? '',
           },
           geometry: {
             type: 'LineString' as const,
@@ -525,5 +532,10 @@ export function headingToStop(
   }
 
   if (!target) return null
-  return { name: target.name, miles: milesBetween(point, target) }
+  return {
+    name: target.name,
+    miles: milesBetween(point, target),
+    lat: target.lat,
+    lon: target.lon,
+  }
 }

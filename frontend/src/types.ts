@@ -49,6 +49,8 @@ export type LatLon = {
 export type NextStop = {
   name: string
   miles: number
+  lat: number
+  lon: number
 }
 
 export type LineNeighbors = {

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { ArrowLeftRight, CircleArrowDown, CircleArrowUp, MapPin, TrainFront } from 'lucide-react'
 import { Marker } from '@vis.gl/react-maplibre'
 import { LINE_COLORS, lighten, routeColor, stationColors, withAlpha } from '@/colors'
@@ -79,12 +80,14 @@ function NextStops({
   stops,
   color,
   shade,
+  onGoToStation,
 }: {
   label: string
   Icon: typeof CircleArrowUp
   stops: NextStop[]
   color: string
   shade: 'light' | 'deep'
+  onGoToStation: (stop: NextStop) => void
 }) {
   const fill = withAlpha(color, shade === 'light' ? 0.28 : 0.14)
   const ring = withAlpha(color, shade === 'light' ? 0.5 : 0.35)
@@ -103,20 +106,87 @@ function NextStops({
         <p className="mt-1 truncate text-xs opacity-55">Terminus</p>
       ) : (
         stops.map((stop) => (
-          <div key={stop.name} className="mt-1 min-w-0">
-            <p className="truncate text-xs font-medium leading-tight">{stop.name}</p>
+          <button
+            key={stop.name}
+            type="button"
+            className="mt-1 block w-full min-w-0 cursor-pointer border-0 bg-transparent p-0 text-left font-inherit text-inherit"
+            onClick={(event) => {
+              event.stopPropagation()
+              onGoToStation(stop)
+            }}
+          >
+            <p className="truncate text-xs font-medium leading-tight underline-offset-2 hover:underline">
+              {stop.name}
+            </p>
             <p className="text-[10px] tabular-nums opacity-60">
               {stop.miles.toFixed(2)} mi
             </p>
-          </div>
+          </button>
         ))
       )}
     </div>
   )
 }
 
-export function StationMark({ station }: { station: MapStation }) {
+function LinePill({
+  line,
+  highlighted,
+  compact,
+  onHighlight,
+}: {
+  line: string
+  highlighted: boolean
+  compact?: boolean
+  onHighlight: (route: string) => void
+}) {
+  return (
+    <button
+      type="button"
+      className={cn(
+        'cursor-pointer font-bold tracking-wide text-white uppercase',
+        compact
+          ? 'rounded px-1 py-px text-[9px]'
+          : 'rounded-md px-1.5 py-0.5 text-[10px]',
+        highlighted && 'ring-2 ring-white/90',
+      )}
+      style={{ background: routeColor(line) }}
+      title={line}
+      aria-pressed={highlighted}
+      onClick={(event) => {
+        event.stopPropagation()
+        onHighlight(line)
+      }}
+    >
+      {routeBadge(line)}
+    </button>
+  )
+}
+
+export function StationMark({
+  station,
+  highlightedRoute,
+  focused,
+  anyFocused,
+  onHighlightRoute,
+  onDismissFocus,
+  onGoToStation,
+}: {
+  station: MapStation
+  highlightedRoute: string | null
+  focused: boolean
+  anyFocused: boolean
+  onHighlightRoute: (route: string) => void
+  onDismissFocus: () => void
+  onGoToStation: (stop: NextStop) => void
+}) {
+  const [hoverOpen, setHoverOpen] = useState(false)
   const keys = stationColors(station.lines)
+  const open = focused || (!anyFocused && hoverOpen)
+
+  useEffect(() => {
+    if (!focused) setHoverOpen(false)
+  }, [focused, anyFocused])
+
   if (keys.length === 0) return null
 
   const colors = station.lines.map((line) => routeColor(line))
@@ -125,7 +195,17 @@ export function StationMark({ station }: { station: MapStation }) {
   const commuterOnly = station.lines.every(isCommuterRoute)
   return (
     <Marker longitude={station.lon} latitude={station.lat} anchor="center">
-      <Popover modal={false}>
+      <Popover
+        modal={false}
+        open={open}
+        onOpenChange={(next, details) => {
+          if (focused) {
+            if (!next && details.reason !== 'trigger-hover') onDismissFocus()
+            return
+          }
+          setHoverOpen(next)
+        }}
+      >
         <PopoverTrigger
           nativeButton
           openOnHover
@@ -165,19 +245,14 @@ export function StationMark({ station }: { station: MapStation }) {
           </div>
 
           <div className="flex flex-wrap gap-1 px-3">
-            {station.lines.map((line) => {
-              const color = routeColor(line)
-              return (
-                <span
-                  key={line}
-                  className="rounded-md px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-white uppercase"
-                  style={{ background: color }}
-                  title={line}
-                >
-                  {routeBadge(line)}
-                </span>
-              )
-            })}
+            {station.lines.map((line) => (
+              <LinePill
+                key={line}
+                line={line}
+                highlighted={highlightedRoute === line}
+                onHighlight={onHighlightRoute}
+              />
+            ))}
           </div>
 
           <div className="mt-2 grid grid-cols-2 gap-1.5 px-3">
@@ -220,13 +295,13 @@ export function StationMark({ station }: { station: MapStation }) {
                   {station.neighbors.length > 1 && (
                     <div className="mb-1.5 flex flex-wrap gap-1">
                       {group.routes.map((line) => (
-                        <span
+                        <LinePill
                           key={line}
-                          className="rounded px-1 py-px text-[9px] font-bold tracking-wide text-white uppercase"
-                          style={{ background: routeColor(line) }}
-                        >
-                          {routeBadge(line)}
-                        </span>
+                          line={line}
+                          compact
+                          highlighted={highlightedRoute === line}
+                          onHighlight={onHighlightRoute}
+                        />
                       ))}
                     </div>
                   )}
@@ -237,6 +312,7 @@ export function StationMark({ station }: { station: MapStation }) {
                       stops={group.outbound}
                       color={routeColor(group.routes[0])}
                       shade="light"
+                      onGoToStation={onGoToStation}
                     />
                     <NextStops
                       label="Inbound"
@@ -244,6 +320,7 @@ export function StationMark({ station }: { station: MapStation }) {
                       stops={group.inbound}
                       color={routeColor(group.routes[0])}
                       shade="deep"
+                      onGoToStation={onGoToStation}
                     />
                   </div>
                 </div>

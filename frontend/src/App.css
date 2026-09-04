@@ -53,6 +53,11 @@
   background: none;
   cursor: pointer;
   color: inherit;
+  transition: opacity 0.28s ease;
+}
+
+.vehicle-hit.is-dimmed {
+  opacity: 0.18;
 }
 
 .vehicle-glow {

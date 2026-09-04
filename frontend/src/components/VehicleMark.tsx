@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import {
   CircleArrowDown,
   CircleArrowUp,
@@ -111,11 +112,18 @@ export function VehicleMark({
   vehicle,
   heading = 0,
   nextStop,
+  dimmed = false,
+  hoverLocked,
+  onGoToStation,
 }: {
   vehicle: Vehicle & LatLon
   heading?: number
   nextStop?: NextStop | null
+  dimmed?: boolean
+  hoverLocked: boolean
+  onGoToStation: (stop: NextStop) => void
 }) {
+  const [hoverOpen, setHoverOpen] = useState(false)
   const color = routeColor(vehicle.route)
   const title = vehicle.label || vehicle.id
   const status = vehicle.current_status
@@ -133,9 +141,19 @@ export function VehicleMark({
   const StatusIcon = status?.Icon
   const showCars = (vehicle.carriages ?? 0) > 0
 
+  useEffect(() => {
+    if (hoverLocked) setHoverOpen(false)
+  }, [hoverLocked])
+
   return (
     <Marker longitude={vehicle.lon} latitude={vehicle.lat} anchor="center">
-      <Popover modal={false}>
+      <Popover
+        modal={false}
+        open={!hoverLocked && hoverOpen}
+        onOpenChange={(next) => {
+          if (!hoverLocked) setHoverOpen(next)
+        }}
+      >
         <PopoverTrigger
           nativeButton
           openOnHover
@@ -147,6 +165,7 @@ export function VehicleMark({
             vehicle.current_status === 'IN_TRANSIT_TO' && 'is-moving',
             vehicle.current_status === 'STOPPED_AT' && 'is-stopped',
             vehicle.current_status === 'INCOMING_AT' && 'is-arriving',
+            dimmed && 'is-dimmed',
           )}
         >
           <span
@@ -210,25 +229,30 @@ export function VehicleMark({
 
           {nextStop && (
             <div className="mt-2 px-3">
-              <div
-                className="rounded-md px-2 py-1.5"
+              <button
+                type="button"
+                className="w-full cursor-pointer rounded-md border-0 px-2 py-1.5 text-left font-inherit"
                 style={{
                   background: withAlpha(color, 0.22),
                   color: lighten(color, 0.45),
                   boxShadow: `inset 0 0 0 1px ${withAlpha(color, 0.45)}`,
+                }}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onGoToStation(nextStop)
                 }}
               >
                 <p className="flex items-center gap-1 text-[10px] font-medium tracking-wide uppercase opacity-80">
                   <MapPin className="size-3" />
                   Next stop
                 </p>
-                <p className="mt-1 truncate text-xs font-medium leading-tight">
+                <p className="mt-1 truncate text-xs font-medium leading-tight underline-offset-2 hover:underline">
                   {nextStop.name}
                 </p>
                 <p className="text-[10px] tabular-nums opacity-60">
                   {nextStop.miles.toFixed(2)} mi
                 </p>
-              </div>
+              </button>
             </div>
           )}
 
