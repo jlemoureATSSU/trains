@@ -1,4 +1,6 @@
 export type LinePoint = {
+  id?: string
+  parent_id?: string
   name?: string
   lat: number
   lon: number
@@ -59,6 +61,21 @@ export type LineNeighbors = {
   inbound: NextStop[]
 }
 
+export type Prediction = {
+  id: string
+  stop?: string
+  route?: string
+  trip?: string
+  vehicle?: string
+  direction_id?: number
+  arrival_time?: string
+  departure_time?: string
+  status?: string
+  headsign?: string
+  stop_sequence?: number
+  schedule_relationship?: string
+}
+
 export type MapStation = {
   name: string
   lat: number
@@ -66,6 +83,7 @@ export type MapStation = {
   lines: string[]
   fromCr: boolean
   neighbors: LineNeighbors[]
+  stopIds: string[]
 }
 
 export type Segment = {

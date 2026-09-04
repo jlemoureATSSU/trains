@@ -29,6 +29,10 @@ function milesBetween(a: LatLon, b: LatLon): number {
   return distMeters(a, b) / 1609.344
 }
 
+function predictionStopId(point: LinePoint): string | undefined {
+  return point.parent_id || point.id
+}
+
 function stationsFromLines(lines: Line[]): MapStation[] {
   const byName = new Map<string, MapStation>()
   for (const line of lines) {
@@ -45,6 +49,7 @@ function stationsFromLines(lines: Line[]): MapStation[] {
           lines: [],
           fromCr: isCommuter(line.route),
           neighbors: [],
+          stopIds: [],
         }
         byName.set(key, station)
       } else if (station.fromCr && !isCommuter(line.route)) {
@@ -54,6 +59,10 @@ function stationsFromLines(lines: Line[]): MapStation[] {
       }
       if (line.route && !station.lines.includes(line.route)) {
         station.lines.push(line.route)
+      }
+      const stopId = predictionStopId(point)
+      if (stopId && !station.stopIds.includes(stopId)) {
+        station.stopIds.push(stopId)
       }
     }
   }

@@ -113,14 +113,20 @@ export function VehicleMark({
   heading = 0,
   nextStop,
   dimmed = false,
-  hoverLocked,
+  focused,
+  anyFocused,
+  onDismissFocus,
+  onGoToVehicle,
   onGoToStation,
 }: {
   vehicle: Vehicle & LatLon
   heading?: number
   nextStop?: NextStop | null
   dimmed?: boolean
-  hoverLocked: boolean
+  focused: boolean
+  anyFocused: boolean
+  onDismissFocus: () => void
+  onGoToVehicle: (vehicle: Vehicle) => void
   onGoToStation: (stop: NextStop) => void
 }) {
   const [hoverOpen, setHoverOpen] = useState(false)
@@ -140,18 +146,23 @@ export function VehicleMark({
   const updated = updatedLabel(vehicle.updated_at)
   const StatusIcon = status?.Icon
   const showCars = (vehicle.carriages ?? 0) > 0
+  const open = focused || (!anyFocused && hoverOpen)
 
   useEffect(() => {
-    if (hoverLocked) setHoverOpen(false)
-  }, [hoverLocked])
+    if (!focused) setHoverOpen(false)
+  }, [focused, anyFocused])
 
   return (
     <Marker longitude={vehicle.lon} latitude={vehicle.lat} anchor="center">
       <Popover
         modal={false}
-        open={!hoverLocked && hoverOpen}
-        onOpenChange={(next) => {
-          if (!hoverLocked) setHoverOpen(next)
+        open={open}
+        onOpenChange={(next, details) => {
+          if (focused) {
+            if (!next && details.reason !== 'trigger-hover') onDismissFocus()
+            return
+          }
+          setHoverOpen(next)
         }}
       >
         <PopoverTrigger
@@ -160,6 +171,10 @@ export function VehicleMark({
           delay={80}
           closeDelay={120}
           aria-label={`${title}${vehicle.route ? ` · ${vehicle.route}` : ''}`}
+          onClick={(event) => {
+            event.stopPropagation()
+            if (!focused) onGoToVehicle(vehicle)
+          }}
           className={cn(
             'vehicle-hit',
             vehicle.current_status === 'IN_TRANSIT_TO' && 'is-moving',

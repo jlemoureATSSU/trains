@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { Layer, Map, Source, type MapRef } from '@vis.gl/react-maplibre'
 import { MAP_STYLES, MapControls, LINE_MODES, type LineMode, type MapStyleId } from '@/components/MapControls'
 import { StationMark } from '@/components/StationMark'
 import { VehicleMark } from '@/components/VehicleMark'
-import { linesToGeoJSON, lineLabelsToGeoJSON, headingToStop, prepareMap } from './geo'
+import { linesToGeoJSON, lineLabelsToGeoJSON, headingToStop, prepareMap, snapToRoute } from './geo'
 import { applyMapScene } from './mapScene'
-import type { Line, Vehicle } from './types'
+import type { LatLon, Line, Vehicle } from './types'
 import { useVehicleMotion, VEHICLE_POLL_MS } from './useVehicleMotion'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import './App.css'
@@ -146,19 +146,46 @@ function dimOpacity(highlighted: string | null, on: number, off: number) {
 }
 
 function VehicleLayer({
+  mapRef,
   vehicles,
   plot,
   highlightedRoute,
-  hoverLocked,
+  focusedId,
+  anyFocused,
+  flying,
+  onDismissFocus,
+  onGoToVehicle,
   onGoToStation,
 }: {
+  mapRef: RefObject<MapRef | null>
   vehicles: Vehicle[]
   plot: ReturnType<typeof prepareMap>
   highlightedRoute: string | null
-  hoverLocked: boolean
+  focusedId: string | null
+  anyFocused: boolean
+  flying: boolean
+  onDismissFocus: () => void
+  onGoToVehicle: (vehicle: Vehicle) => void
   onGoToStation: (stop: { name: string; lat: number; lon: number }) => void
 }) {
   const marks = useVehicleMotion(vehicles, plot)
+  const followed = focusedId
+    ? marks.find((vehicle) => vehicle.id === focusedId)
+    : undefined
+
+  useEffect(() => {
+    if (focusedId && !flying && !followed) onDismissFocus()
+  }, [focusedId, flying, followed, onDismissFocus])
+
+  useEffect(() => {
+    if (!followed || flying) return
+    mapRef.current?.easeTo({
+      center: [followed.lon, followed.lat],
+      offset: [0, 80],
+      duration: 0,
+    })
+  }, [followed, flying, mapRef])
+
   return (
     <>
       {marks.map((v) => (
@@ -167,7 +194,10 @@ function VehicleLayer({
           vehicle={v}
           heading={v.heading}
           dimmed={Boolean(highlightedRoute && v.route !== highlightedRoute)}
-          hoverLocked={hoverLocked}
+          focused={focusedId === v.id}
+          anyFocused={anyFocused}
+          onDismissFocus={onDismissFocus}
+          onGoToVehicle={onGoToVehicle}
           onGoToStation={onGoToStation}
           nextStop={headingToStop(
             v,
@@ -195,10 +225,21 @@ function App() {
   const [lineMode, setLineMode] = useState<LineMode>('all')
   const [highlightedRoute, setHighlightedRoute] = useState<string | null>(null)
   const [focusedStation, setFocusedStation] = useState<string | null>(null)
+  const [focusedVehicle, setFocusedVehicle] = useState<string | null>(null)
   const [flyingToStation, setFlyingToStation] = useState(false)
+  const anyFocused = Boolean(focusedStation) || Boolean(focusedVehicle) || flyingToStation
   const [viewState, setViewState] = useState(BOSTON)
   const routeTypes = LINE_MODES[lineMode].routeTypes
   const plot = useMemo(() => prepareMap(lines), [lines])
+  const vehiclesById = useMemo(() => {
+    const byId: Record<string, Vehicle> = {}
+    for (const vehicle of vehicles) byId[vehicle.id] = vehicle
+    return byId
+  }, [vehicles])
+  const dimRoute =
+    (focusedVehicle ? vehiclesById[focusedVehicle]?.route : undefined) ??
+    highlightedRoute ??
+    null
   const lineGeoJSON = useMemo(() => linesToGeoJSON(plot.lines), [plot.lines])
   const lineLabelGeoJSON = useMemo(
     () => lineLabelsToGeoJSON(plot.lines),
@@ -217,6 +258,7 @@ function App() {
     const camera = mapRef.current
     const id = ++stationFlight.current
     setFocusedStation(null)
+    setFocusedVehicle(null)
     setFlyingToStation(true)
     if (!camera) {
       setFlyingToStation(false)
@@ -233,6 +275,38 @@ function App() {
       if (stationFlight.current !== id) return
       setFlyingToStation(false)
       setFocusedStation(station.name)
+    })
+  }
+
+  function goToVehicle(vehicle: Vehicle) {
+    if (!Number.isFinite(vehicle.latitude) || !Number.isFinite(vehicle.longitude)) {
+      return
+    }
+    const point: LatLon = snapToRoute(
+      { lat: vehicle.latitude as number, lon: vehicle.longitude as number },
+      vehicle.route,
+      plot.segmentsByRoute,
+    )
+    const camera = mapRef.current
+    const id = ++stationFlight.current
+    setFocusedStation(null)
+    setFocusedVehicle(null)
+    setFlyingToStation(true)
+    if (!camera) {
+      setFlyingToStation(false)
+      setFocusedVehicle(vehicle.id)
+      return
+    }
+    camera.easeTo({
+      center: [point.lon, point.lat],
+      zoom: STATION_FOCUS_ZOOM,
+      offset: [0, 80],
+      duration: STATION_FOCUS_MS,
+    })
+    camera.getMap().once('moveend', () => {
+      if (stationFlight.current !== id) return
+      setFlyingToStation(false)
+      setFocusedVehicle(vehicle.id)
     })
   }
 
@@ -304,6 +378,7 @@ function App() {
             stationFlight.current += 1
             setFlyingToStation(false)
             setFocusedStation(null)
+            setFocusedVehicle(null)
           }}
           onPitchChange={(pitch) => setViewState((view) => ({ ...view, pitch }))}
           onBearingChange={(bearing) =>
@@ -316,13 +391,17 @@ function App() {
               duration: RESET_CAMERA_MS,
             })
           }
-          onResetLocation={() =>
+          onResetLocation={() => {
+            stationFlight.current += 1
+            setFlyingToStation(false)
+            setFocusedStation(null)
+            setFocusedVehicle(null)
             mapRef.current?.easeTo({
               center: [BOSTON.longitude, BOSTON.latitude],
               zoom: BOSTON.zoom,
               duration: RESET_CAMERA_MS,
             })
-          }
+          }}
         />
       </div>
       {error && <p className="status">Could not load lines: {error}</p>}
@@ -355,6 +434,7 @@ function App() {
             stationFlight.current += 1
             setFlyingToStation(false)
             setFocusedStation(null)
+            setFocusedVehicle(null)
           }}
           mapStyle={MAP_STYLES[styleId].url}
           canvasContextAttributes={{ antialias: true }}
@@ -368,7 +448,7 @@ function App() {
                 layout={lineLayout}
                 paint={{
                   ...lineGlowPaint,
-                  'line-opacity': dimOpacity(highlightedRoute, 0.38, 0.06),
+                  'line-opacity': dimOpacity(dimRoute, 0.38, 0.06),
                 }}
               />
               <Layer
@@ -377,7 +457,7 @@ function App() {
                 layout={lineLayout}
                 paint={{
                   ...lineCorePaint,
-                  'line-opacity': dimOpacity(highlightedRoute, 0.96, 0.12),
+                  'line-opacity': dimOpacity(dimRoute, 0.96, 0.12),
                 }}
               />
             </Source>
@@ -391,7 +471,7 @@ function App() {
                 layout={lineNamesLayout}
                 paint={{
                   ...lineNamesPaint,
-                  'text-opacity': dimOpacity(highlightedRoute, 0.96, 0.14),
+                  'text-opacity': dimOpacity(dimRoute, 0.96, 0.14),
                 }}
               />
             </Source>
@@ -400,9 +480,9 @@ function App() {
             <StationMark
               key={s.name}
               station={s}
-              highlightedRoute={highlightedRoute}
+              highlightedRoute={dimRoute}
               focused={focusedStation === s.name}
-              anyFocused={Boolean(focusedStation) || flyingToStation}
+              anyFocused={anyFocused}
               onHighlightRoute={(route) =>
                 setHighlightedRoute((current) =>
                   current === route ? null : route,
@@ -410,13 +490,20 @@ function App() {
               }
               onDismissFocus={() => setFocusedStation(null)}
               onGoToStation={goToStation}
+              vehiclesById={vehiclesById}
+              onGoToVehicle={goToVehicle}
             />
           ))}
           <VehicleLayer
+            mapRef={mapRef}
             vehicles={vehicles}
             plot={plot}
-            highlightedRoute={highlightedRoute}
-            hoverLocked={Boolean(focusedStation) || flyingToStation}
+            highlightedRoute={dimRoute}
+            focusedId={focusedVehicle}
+            anyFocused={anyFocused}
+            flying={flyingToStation}
+            onDismissFocus={() => setFocusedVehicle(null)}
+            onGoToVehicle={goToVehicle}
             onGoToStation={goToStation}
           />
         </Map>
