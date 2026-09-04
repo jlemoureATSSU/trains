@@ -1,28 +1,15 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import {
-  bearingDegrees,
-  lerpLatLon,
-  movedSince,
-  nextStopToward,
-  snapToRoute,
-} from './geo'
+import { useMemo, useRef } from 'react'
+import { bearingDegrees, movedSince, nextStopToward, snapToRoute } from './geo'
 import type { LatLon, Plot, Vehicle } from './types'
 
 export const VEHICLE_POLL_MS = 8_000
+export const VEHICLE_SLIDE_MS = 1_000
 
 export type MovingVehicle = Vehicle &
   LatLon & {
     heading: number
+    slide: boolean
   }
-
-type Track = {
-  from: LatLon
-  to: LatLon
-  startedAt: number
-  duration: number
-  heading: number
-  onLine: boolean
-}
 
 function isStopped(status?: string) {
   return status === 'STOPPED_AT'
@@ -52,111 +39,60 @@ function headingFor(
   return fromHeading
 }
 
-function at(track: Track, now: number): LatLon {
-  if (track.duration <= 0) return track.to
-  return lerpLatLon(track.from, track.to, (now - track.startedAt) / track.duration)
-}
-
 export function useVehicleMotion(vehicles: Vehicle[], plot: Plot): MovingVehicle[] {
-  const tracks = useRef(new Map<string, Track>())
+  const headings = useRef(new Map<string, number>())
+  const lastPos = useRef(new Map<string, LatLon>())
+  const onLineById = useRef(new Map<string, boolean>())
   const segmentsRef = useRef(plot.segmentsByRoute)
-  const [now, setNow] = useState(() => performance.now())
 
-  const snapped = useMemo(
-    () =>
-      vehicles
-        .filter(
-          (v): v is Vehicle & { latitude: number; longitude: number } =>
-            Number.isFinite(v.latitude) && Number.isFinite(v.longitude),
-        )
-        .map((v) => ({
-          ...v,
-          ...snapToRoute(
-            { lat: v.latitude, lon: v.longitude },
-            v.route,
-            plot.segmentsByRoute,
-          ),
-        })),
-    [vehicles, plot.segmentsByRoute],
-  )
-
-  useLayoutEffect(() => {
-    const t = performance.now()
-    const seen = new Set<string>()
+  return useMemo(() => {
     const plotChanged = segmentsRef.current !== plot.segmentsByRoute
     segmentsRef.current = plot.segmentsByRoute
-    let jumped = false
+    const seen = new Set<string>()
+    const marks: MovingVehicle[] = []
 
-    for (const vehicle of snapped) {
-      seen.add(vehicle.id)
-      const target = { lat: vehicle.lat, lon: vehicle.lon }
-      const prev = tracks.current.get(vehicle.id)
+    for (const vehicle of vehicles) {
+      if (!Number.isFinite(vehicle.latitude) || !Number.isFinite(vehicle.longitude)) {
+        continue
+      }
+      const pos = snapToRoute(
+        { lat: vehicle.latitude as number, lon: vehicle.longitude as number },
+        vehicle.route,
+        plot.segmentsByRoute,
+      )
+      const seenBefore = lastPos.current.has(vehicle.id)
+      const prev = lastPos.current.get(vehicle.id) ?? pos
       const onLine = Boolean(
         vehicle.route && plot.segmentsByRoute.get(vehicle.route)?.length,
       )
+      const snapOntoLine = onLine && !onLineById.current.get(vehicle.id)
+      const slide =
+        seenBefore &&
+        !plotChanged &&
+        !snapOntoLine &&
+        movedSince(prev, pos, 8)
+      const heading = headingFor(
+        prev,
+        pos,
+        vehicle,
+        plot,
+        headings.current.get(vehicle.id) ?? null,
+      )
+      headings.current.set(vehicle.id, heading)
+      lastPos.current.set(vehicle.id, pos)
+      onLineById.current.set(vehicle.id, onLine)
+      seen.add(vehicle.id)
+      marks.push({ ...vehicle, ...pos, heading, slide })
+    }
 
-      if (!prev) {
-        tracks.current.set(vehicle.id, {
-          from: target,
-          to: target,
-          startedAt: t,
-          duration: 0,
-          heading: headingFor(target, target, vehicle, plot, null),
-          onLine,
-        })
-        continue
+    for (const id of headings.current.keys()) {
+      if (!seen.has(id)) {
+        headings.current.delete(id)
+        lastPos.current.delete(id)
+        onLineById.current.delete(id)
       }
-
-      if (!movedSince(prev.to, target, 15)) {
-        prev.heading = headingFor(prev.from, prev.to, vehicle, plot, prev.heading)
-        prev.onLine = onLine
-        continue
-      }
-
-      const instant = plotChanged || (onLine && !prev.onLine)
-      const current = instant ? target : at(prev, t)
-      tracks.current.set(vehicle.id, {
-        from: current,
-        to: target,
-        startedAt: t,
-        duration: instant ? 0 : VEHICLE_POLL_MS,
-        heading: headingFor(current, target, vehicle, plot, prev.heading),
-        onLine,
-      })
-      if (instant) jumped = true
     }
 
-    for (const id of tracks.current.keys()) {
-      if (!seen.has(id)) tracks.current.delete(id)
-    }
-
-    if (jumped) setNow(t)
-  }, [snapped, plot])
-
-  useEffect(() => {
-    let frame = 0
-    let last = 0
-    const tick = (time: number) => {
-      if (time - last >= 33) {
-        last = time
-        setNow(time)
-      }
-      frame = requestAnimationFrame(tick)
-    }
-    frame = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(frame)
-  }, [])
-
-  return snapped.map((vehicle) => {
-    const track = tracks.current.get(vehicle.id)
-    if (!track) {
-      return { ...vehicle, heading: 0 }
-    }
-    const pos = at(track, now)
-    return {
-      ...vehicle,
-      ...pos,
-      heading: track.heading,
-    }
-  })
+    return marks
+  }, [vehicles, plot])
 }
