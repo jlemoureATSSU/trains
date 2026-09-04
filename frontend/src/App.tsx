@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Layer, Map, Marker, Source, type LayerProps } from '@vis.gl/react-maplibre'
+import { MAP_STYLES, MapControls, type MapStyleId } from '@/components/MapControls'
 import { LINE_COLORS, darken, routeColor, stationColors } from './colors'
 import { linesToGeoJSON, prepareMap, snapToRoute } from './geo'
 import type { LatLon, Line, MapStation, Vehicle } from './types'
@@ -7,8 +8,13 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import './App.css'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL
-const MAP_STYLE = 'https://tiles.openfreemap.org/styles/dark'
-const BOSTON = { longitude: -71.0589, latitude: 42.3601, zoom: 11 }
+const BOSTON = {
+  longitude: -71.0589,
+  latitude: 42.3601,
+  zoom: 11,
+  pitch: 40,
+  bearing: 0,
+}
 
 const lineLayer: LayerProps = {
   id: 'mbta-lines',
@@ -95,6 +101,8 @@ function App() {
   const [lines, setLines] = useState<Line[]>([])
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [styleId, setStyleId] = useState<MapStyleId>('dark')
+  const [viewState, setViewState] = useState(BOSTON)
   const plot = useMemo(() => prepareMap(lines), [lines])
   const lineGeoJSON = useMemo(() => linesToGeoJSON(plot.lines), [plot.lines])
 
@@ -149,15 +157,33 @@ function App() {
 
   return (
     <main className="page">
+      <div className="map-controls">
+        <MapControls
+          styleId={styleId}
+          pitch={viewState.pitch}
+          bearing={viewState.bearing}
+          onStyleChange={setStyleId}
+          onPitchChange={(pitch) => setViewState((view) => ({ ...view, pitch }))}
+          onBearingChange={(bearing) =>
+            setViewState((view) => ({ ...view, bearing }))
+          }
+          onReset={() =>
+            setViewState((view) => ({
+              ...view,
+              pitch: BOSTON.pitch,
+              bearing: BOSTON.bearing,
+            }))
+          }
+        />
+      </div>
       {error && <p className="status">Could not load lines: {error}</p>}
       {!error && lines.length === 0 && <p className="status">Loading…</p>}
       <div className="map">
         <Map
-          initialViewState={BOSTON}
-          mapStyle={MAP_STYLE}
+          {...viewState}
+          onMove={(event) => setViewState(event.viewState)}
+          mapStyle={MAP_STYLES[styleId].url}
           projection="globe"
-          pitch={40}
-          bearing={0}
           style={{ width: '100%', height: '100%' }}
         >
           {lineGeoJSON.features.length > 0 && (

@@ -4,10 +4,17 @@
   height: 100%;
 }
 
+.map-controls {
+  position: absolute;
+  z-index: 10;
+  top: 12px;
+  left: 12px;
+}
+
 .status {
   position: absolute;
   z-index: 2;
-  inset: 16px 16px auto;
+  inset: 16px 64px auto 16px;
   margin: 0;
   color: #444;
   pointer-events: none;
