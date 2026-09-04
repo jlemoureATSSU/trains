@@ -106,7 +106,13 @@ function Carriages({ count, color }: { count: number; color: string }) {
   )
 }
 
-export function VehicleMark({ vehicle }: { vehicle: Vehicle & LatLon }) {
+export function VehicleMark({
+  vehicle,
+  heading = 0,
+}: {
+  vehicle: Vehicle & LatLon
+  heading?: number
+}) {
   const color = routeColor(vehicle.route)
   const title = vehicle.label || vehicle.id
   const status = vehicle.current_status
@@ -122,6 +128,7 @@ export function VehicleMark({ vehicle }: { vehicle: Vehicle & LatLon }) {
   const speed = mph(vehicle.speed)
   const updated = updatedLabel(vehicle.updated_at)
   const StatusIcon = status?.Icon
+  const showCars = (vehicle.carriages ?? 0) > 0
 
   return (
     <Marker longitude={vehicle.lon} latitude={vehicle.lat} anchor="center">
@@ -139,7 +146,12 @@ export function VehicleMark({ vehicle }: { vehicle: Vehicle & LatLon }) {
             vehicle.current_status === 'INCOMING_AT' && 'is-arriving',
           )}
         >
-          <VehicleIcon color={color} carriages={vehicle.carriages} />
+          <span
+            className="vehicle-rotate"
+            style={{ transform: `rotate(${heading}deg)` }}
+          >
+            <VehicleIcon color={color} carriages={vehicle.carriages} />
+          </span>
         </PopoverTrigger>
         <PopoverContent
           side="top"
@@ -193,7 +205,12 @@ export function VehicleMark({ vehicle }: { vehicle: Vehicle & LatLon }) {
             </div>
           </div>
 
-          <div className="mt-2 grid grid-cols-2 gap-px bg-white/10">
+          <div
+            className={cn(
+              'mt-2 grid gap-px bg-white/10',
+              showCars ? 'grid-cols-2' : 'grid-cols-1',
+            )}
+          >
             <div className="bg-popover px-3 py-2.5">
               <p className="text-[10px] tracking-wide text-white/40 uppercase">
                 Speed
@@ -207,17 +224,19 @@ export function VehicleMark({ vehicle }: { vehicle: Vehicle & LatLon }) {
                 )}
               </p>
             </div>
-            <div className="bg-popover px-3 py-2.5">
-              <p className="text-[10px] tracking-wide text-white/40 uppercase">
-                {vehicle.carriages === 1 ? 'Car' : 'Cars'}
-              </p>
-              <div className="mt-1.5 flex items-center justify-between gap-2">
-                <Carriages count={vehicle.carriages} color={color} />
-                <span className="text-sm font-semibold tabular-nums">
-                  {vehicle.carriages}
-                </span>
+            {showCars && (
+              <div className="bg-popover px-3 py-2.5">
+                <p className="text-[10px] tracking-wide text-white/40 uppercase">
+                  {vehicle.carriages === 1 ? 'Car' : 'Cars'}
+                </p>
+                <div className="mt-1.5 flex items-center justify-between gap-2">
+                  <Carriages count={vehicle.carriages} color={color} />
+                  <span className="text-sm font-semibold tabular-nums">
+                    {vehicle.carriages}
+                  </span>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {updated && (

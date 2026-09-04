@@ -1,4 +1,4 @@
-import { Compass, Menu, MoveVertical, RotateCcw } from 'lucide-react'
+import { Compass, LocateFixed, Menu, MoveVertical, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Popover,
@@ -48,6 +48,7 @@ type MapControlsProps = {
   onPitchChange: (pitch: number) => void
   onBearingChange: (bearing: number) => void
   onReset: () => void
+  onResetLocation: () => void
 }
 
 export function MapControls({
@@ -58,6 +59,7 @@ export function MapControls({
   onPitchChange,
   onBearingChange,
   onReset,
+  onResetLocation,
 }: MapControlsProps) {
   return (
     <Popover>
@@ -179,14 +181,24 @@ export function MapControls({
           />
         </div>
 
-        <button
-          type="button"
-          onClick={onReset}
-          className="mt-2 flex w-full items-center gap-1.5 px-3 py-2 text-[11px] text-white/40 transition-colors hover:bg-white/5 hover:text-white/70"
-        >
-          <RotateCcw className="size-3" />
-          Reset pitch and bearing
-        </button>
+        <div className="mt-2">
+          <button
+            type="button"
+            onClick={onReset}
+            className="flex w-full items-center gap-1.5 px-3 py-2 text-[11px] text-white/40 transition-colors hover:bg-white/5 hover:text-white/70"
+          >
+            <RotateCcw className="size-3" />
+            Reset pitch and bearing
+          </button>
+          <button
+            type="button"
+            onClick={onResetLocation}
+            className="flex w-full items-center gap-1.5 px-3 py-2 text-[11px] text-white/40 transition-colors hover:bg-white/5 hover:text-white/70"
+          >
+            <LocateFixed className="size-3" />
+            Reset location
+          </button>
+        </div>
       </PopoverContent>
     </Popover>
   )

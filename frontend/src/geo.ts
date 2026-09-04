@@ -116,7 +116,18 @@ export function prepareMap(lines: Line[]): Plot {
     segmentsByRoute.set(line.route, segs)
   }
 
-  return { stations, lines: mappedLines, segmentsByRoute }
+  const pointsByRoute = new Map<string, LatLon[]>()
+  for (const line of mappedLines) {
+    if (!line.route || line.points.length === 0) continue
+    if (!pointsByRoute.has(line.route)) {
+      pointsByRoute.set(
+        line.route,
+        line.points.map((p) => ({ lat: p.lat, lon: p.lon })),
+      )
+    }
+  }
+
+  return { stations, lines: mappedLines, segmentsByRoute, pointsByRoute }
 }
 
 export function linesToGeoJSON(lines: Line[]) {
@@ -178,4 +189,58 @@ export function snapToRoute(
   const segments = segmentsByRoute.get(route)
   if (!segments?.length) return point
   return nearestOnSegments(point, segments)
+}
+
+function dist2(a: LatLon, b: LatLon): number {
+  const lonScale = Math.cos((a.lat * Math.PI) / 180)
+  const dx = (a.lon - b.lon) * lonScale
+  const dy = a.lat - b.lat
+  return dx * dx + dy * dy
+}
+
+export function movedSince(a: LatLon, b: LatLon, meters = 20): boolean {
+  const deg = meters / 111_320
+  return dist2(a, b) > deg * deg
+}
+
+export function lerpLatLon(from: LatLon, to: LatLon, t: number): LatLon {
+  const u = Math.max(0, Math.min(1, t))
+  return {
+    lat: from.lat + (to.lat - from.lat) * u,
+    lon: from.lon + (to.lon - from.lon) * u,
+  }
+}
+
+export function bearingDegrees(from: LatLon, to: LatLon): number | null {
+  const lonScale = Math.cos((from.lat * Math.PI) / 180)
+  const dx = (to.lon - from.lon) * lonScale
+  const dy = to.lat - from.lat
+  if (dx * dx + dy * dy < 1e-16) return null
+  return (Math.atan2(dx, dy) * 180) / Math.PI
+}
+
+export function nextStopToward(
+  point: LatLon,
+  route: string | null | undefined,
+  directionId: number | null | undefined,
+  pointsByRoute: Map<string, LatLon[]>,
+): LatLon | null {
+  if (!route) return null
+  const points = pointsByRoute.get(route)
+  if (!points || points.length < 2) return null
+
+  let best = 0
+  let bestD = Infinity
+  for (let i = 0; i < points.length; i++) {
+    const d = dist2(point, points[i])
+    if (d < bestD) {
+      bestD = d
+      best = i
+    }
+  }
+
+  const step = directionId === 1 ? -1 : 1
+  const next = best + step
+  if (next >= 0 && next < points.length) return points[next]
+  return null
 }

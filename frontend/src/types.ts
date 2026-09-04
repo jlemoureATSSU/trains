@@ -63,4 +63,5 @@ export type Plot = {
   stations: MapStation[]
   lines: Line[]
   segmentsByRoute: Map<string, Segment[]>
+  pointsByRoute: Map<string, LatLon[]>
 }

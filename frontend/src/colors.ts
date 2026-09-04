@@ -16,7 +16,7 @@ function colorKey(line: string | null | undefined): LineColor | null {
   if (name.startsWith('cr-') || name.includes('commuter')) return 'purple'
   if (name.includes('green')) return 'green'
   if (name.includes('orange')) return 'orange'
-  if (name.includes('red')) return 'red'
+  if (name.includes('red') || name.includes('mattapan')) return 'red'
   if (name.includes('blue')) return 'blue'
   return null
 }

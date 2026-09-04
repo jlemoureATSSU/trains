@@ -5,6 +5,7 @@ export function routeBadge(route?: string) {
     const branch = route.slice(3).replaceAll('-', ' ')
     return branch.length <= 6 ? branch : `${branch.slice(0, 5)}.`
   }
+  if (/mattapan/i.test(route)) return 'M'
   if (/red/i.test(route)) return 'RL'
   if (/orange/i.test(route)) return 'OL'
   if (/blue/i.test(route)) return 'BL'

@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Layer, Map, Source, type LayerProps } from '@vis.gl/react-maplibre'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Layer, Map, Source, type LayerProps, type MapRef } from '@vis.gl/react-maplibre'
 import { MAP_STYLES, MapControls, type MapStyleId } from '@/components/MapControls'
 import { StationMark } from '@/components/StationMark'
 import { VehicleMark } from '@/components/VehicleMark'
-import { linesToGeoJSON, prepareMap, snapToRoute } from './geo'
+import { linesToGeoJSON, prepareMap } from './geo'
 import type { Line, Vehicle } from './types'
+import { useVehicleMotion, VEHICLE_POLL_MS } from './useVehicleMotion'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import './App.css'
 
@@ -16,6 +17,7 @@ const BOSTON = {
   pitch: 40,
   bearing: 0,
 }
+const RESET_CAMERA_MS = 1000
 
 const lineLayout = {
   'line-cap': 'round' as const,
@@ -74,7 +76,25 @@ const lineCore: LayerProps = {
   },
 }
 
+function VehicleLayer({
+  vehicles,
+  plot,
+}: {
+  vehicles: Vehicle[]
+  plot: ReturnType<typeof prepareMap>
+}) {
+  const marks = useVehicleMotion(vehicles, plot)
+  return (
+    <>
+      {marks.map((v) => (
+        <VehicleMark key={v.id} vehicle={v} heading={v.heading} />
+      ))}
+    </>
+  )
+}
+
 function App() {
+  const mapRef = useRef<MapRef>(null)
   const [lines, setLines] = useState<Line[]>([])
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -107,30 +127,12 @@ function App() {
         .catch(() => {})
     }
     load()
-    const id = setInterval(load, 30_000)
+    const id = setInterval(load, VEHICLE_POLL_MS)
     return () => {
       cancelled = true
       clearInterval(id)
     }
   }, [])
-
-  const vehicleMarks = useMemo(
-    () =>
-      vehicles
-        .filter(
-          (v): v is Vehicle & { latitude: number; longitude: number } =>
-            Number.isFinite(v.latitude) && Number.isFinite(v.longitude),
-        )
-        .map((v) => {
-          const pos = snapToRoute(
-            { lat: v.latitude, lon: v.longitude },
-            v.route,
-            plot.segmentsByRoute,
-          )
-          return { ...v, ...pos }
-        }),
-    [vehicles, plot.segmentsByRoute],
-  )
 
   return (
     <main className="page">
@@ -145,11 +147,18 @@ function App() {
             setViewState((view) => ({ ...view, bearing }))
           }
           onReset={() =>
-            setViewState((view) => ({
-              ...view,
+            mapRef.current?.easeTo({
               pitch: BOSTON.pitch,
               bearing: BOSTON.bearing,
-            }))
+              duration: RESET_CAMERA_MS,
+            })
+          }
+          onResetLocation={() =>
+            mapRef.current?.easeTo({
+              center: [BOSTON.longitude, BOSTON.latitude],
+              zoom: BOSTON.zoom,
+              duration: RESET_CAMERA_MS,
+            })
           }
         />
       </div>
@@ -157,6 +166,7 @@ function App() {
       {!error && lines.length === 0 && <p className="status">Loading…</p>}
       <div className="map">
         <Map
+          ref={mapRef}
           {...viewState}
           onMove={(event) => setViewState(event.viewState)}
           mapStyle={MAP_STYLES[styleId].url}
@@ -172,9 +182,7 @@ function App() {
           {plot.stations.map((s) => (
             <StationMark key={s.name} station={s} />
           ))}
-          {vehicleMarks.map((v) => (
-            <VehicleMark key={v.id} vehicle={v} />
-          ))}
+          <VehicleLayer vehicles={vehicles} plot={plot} />
         </Map>
       </div>
     </main>
