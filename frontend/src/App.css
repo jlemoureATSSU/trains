@@ -25,10 +25,11 @@
   height: 100%;
 }
 
-.station,
-.vehicle {
+.station-mark,
+.vehicle-mark {
   display: block;
   overflow: visible;
+  filter: drop-shadow(0 1px 1.5px rgb(0 0 0 / 55%));
 }
 
 .station-hit,
@@ -42,4 +43,30 @@
   background: none;
   cursor: pointer;
   color: inherit;
+}
+
+.vehicle-glow {
+  opacity: 0;
+}
+
+.vehicle-hit.is-moving .vehicle-glow {
+  animation: vehicle-pulse 1.8s ease-in-out infinite;
+}
+
+.vehicle-hit.is-arriving .vehicle-glow {
+  opacity: 0.32;
+}
+
+.vehicle-hit.is-stopped .vehicle-mark {
+  opacity: 0.72;
+}
+
+@keyframes vehicle-pulse {
+  0%,
+  100% {
+    opacity: 0.16;
+  }
+  50% {
+    opacity: 0.4;
+  }
 }

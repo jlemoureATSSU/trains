@@ -8,7 +8,7 @@ import {
   Radio,
 } from 'lucide-react'
 import { Marker } from '@vis.gl/react-maplibre'
-import { darken, routeColor } from '@/colors'
+import { routeColor } from '@/colors'
 import {
   Popover,
   PopoverContent,
@@ -54,6 +54,42 @@ function updatedLabel(iso?: string) {
   return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }
 
+function VehicleIcon({ color, carriages }: { color: string; carriages: number }) {
+  const scale = 1 + Math.min(Math.max(carriages, 1), 6) * 0.04
+  const width = Math.round(16 * scale)
+  const height = Math.round(18 * scale)
+
+  return (
+    <svg
+      className="vehicle-mark"
+      width={width}
+      height={height}
+      viewBox="0 0 16 18"
+    >
+      <ellipse
+        className="vehicle-glow"
+        cx="8"
+        cy="10"
+        rx="6.2"
+        ry="5.4"
+        fill={color}
+      />
+      <path
+        d="M8 1.4C8.7 1.4 9.2 1.8 10 3.2L14.4 14.2c.35.85-.2 1.6-1.05 1.6H2.65c-.85 0-1.4-.75-1.05-1.6L6 3.2C6.8 1.8 7.3 1.4 8 1.4Z"
+        fill={color}
+        stroke="#fff"
+        strokeLinejoin="round"
+        strokeWidth="1.35"
+      />
+      <path
+        d="M8 5.2 10.4 12.2H5.6Z"
+        fill="white"
+        fillOpacity="0.28"
+      />
+    </svg>
+  )
+}
+
 function Carriages({ count, color }: { count: number; color: string }) {
   const cars = Math.min(Math.max(count, 0), 8)
   if (cars === 0) return <span className="text-white/40">—</span>
@@ -96,17 +132,14 @@ export function VehicleMark({ vehicle }: { vehicle: Vehicle & LatLon }) {
           delay={80}
           closeDelay={120}
           aria-label={`${title}${vehicle.route ? ` · ${vehicle.route}` : ''}`}
-          className="vehicle-hit"
+          className={cn(
+            'vehicle-hit',
+            vehicle.current_status === 'IN_TRANSIT_TO' && 'is-moving',
+            vehicle.current_status === 'STOPPED_AT' && 'is-stopped',
+            vehicle.current_status === 'INCOMING_AT' && 'is-arriving',
+          )}
         >
-          <svg className="vehicle" width="14" height="14" viewBox="-7 -7 14 14">
-            <polygon
-              points="0,-5.5 4.8,2.8 -4.8,2.8"
-              fill={color}
-              stroke={darken(color)}
-              strokeLinejoin="round"
-              strokeWidth="1.2"
-            />
-          </svg>
+          <VehicleIcon color={color} carriages={vehicle.carriages} />
         </PopoverTrigger>
         <PopoverContent
           side="top"

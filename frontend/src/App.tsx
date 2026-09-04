@@ -17,14 +17,20 @@ const BOSTON = {
   bearing: 0,
 }
 
-const lineLayer: LayerProps = {
-  id: 'mbta-lines',
+const lineLayout = {
+  'line-cap': 'round' as const,
+  'line-join': 'round' as const,
+  'line-sort-key': ['-', 1, ['get', 'commuter']] as [
+    '-',
+    number,
+    ['get', string],
+  ],
+}
+
+const lineGlow: LayerProps = {
+  id: 'mbta-lines-glow',
   type: 'line',
-  layout: {
-    'line-cap': 'round',
-    'line-join': 'round',
-    'line-sort-key': ['-', 1, ['get', 'commuter']],
-  },
+  layout: lineLayout,
   paint: {
     'line-color': ['get', 'color'],
     'line-width': [
@@ -32,11 +38,39 @@ const lineLayer: LayerProps = {
       ['linear'],
       ['zoom'],
       8,
-      ['case', ['==', ['get', 'commuter'], 1], 1.2, 2.2],
+      ['case', ['==', ['get', 'commuter'], 1], 5, 8],
       14,
-      ['case', ['==', ['get', 'commuter'], 1], 2.5, 4],
+      ['case', ['==', ['get', 'commuter'], 1], 10, 16],
     ],
-    'line-opacity': 0.92,
+    'line-blur': [
+      'interpolate',
+      ['linear'],
+      ['zoom'],
+      8,
+      3.5,
+      14,
+      7,
+    ],
+    'line-opacity': 0.38,
+  },
+}
+
+const lineCore: LayerProps = {
+  id: 'mbta-lines',
+  type: 'line',
+  layout: lineLayout,
+  paint: {
+    'line-color': ['get', 'color'],
+    'line-width': [
+      'interpolate',
+      ['linear'],
+      ['zoom'],
+      8,
+      ['case', ['==', ['get', 'commuter'], 1], 1.4, 2.4],
+      14,
+      ['case', ['==', ['get', 'commuter'], 1], 2.6, 4.2],
+    ],
+    'line-opacity': 0.96,
   },
 }
 
@@ -131,7 +165,8 @@ function App() {
         >
           {lineGeoJSON.features.length > 0 && (
             <Source id="mbta-lines" type="geojson" data={lineGeoJSON}>
-              <Layer {...lineLayer} />
+              <Layer {...lineGlow} />
+              <Layer {...lineCore} />
             </Source>
           )}
           {plot.stations.map((s) => (

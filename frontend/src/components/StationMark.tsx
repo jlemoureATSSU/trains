@@ -11,6 +11,62 @@ import { cn } from '@/lib/utils'
 import { isCommuterRoute, routeBadge } from '@/routeMeta'
 import type { MapStation } from '@/types'
 
+function StationIcon({
+  keys,
+  commuterOnly,
+  transfer,
+}: {
+  keys: ReturnType<typeof stationColors>
+  commuterOnly: boolean
+  transfer: boolean
+}) {
+  const size = transfer ? 20 : commuterOnly ? 15 : 14
+  const fill = LINE_COLORS[keys[0]]
+
+  if (commuterOnly && !transfer) {
+    return (
+      <svg
+        className="station-mark"
+        width={size}
+        height={size}
+        viewBox="-8 -8 16 16"
+      >
+        <rect
+          x="-4.1"
+          y="-4.1"
+          width="8.2"
+          height="8.2"
+          rx="1.1"
+          transform="rotate(45)"
+          fill={fill}
+          stroke="#fff"
+          strokeWidth="1.4"
+        />
+      </svg>
+    )
+  }
+
+  return (
+    <svg
+      className="station-mark"
+      width={size}
+      height={size}
+      viewBox="-9 -9 18 18"
+    >
+      {keys.map((key, i) => (
+        <circle
+          key={key}
+          r={3.4 + (keys.length - 1 - i) * 1.85}
+          fill="none"
+          stroke={LINE_COLORS[key]}
+          strokeWidth={transfer ? 1.7 : 2}
+        />
+      ))}
+      <circle r="2.35" fill="#fff" />
+    </svg>
+  )
+}
+
 function formatCoord(lat: number, lon: number) {
   const ns = lat >= 0 ? 'N' : 'S'
   const ew = lon >= 0 ? 'E' : 'W'
@@ -25,10 +81,6 @@ export function StationMark({ station }: { station: MapStation }) {
   const accent = colors[0] ?? LINE_COLORS[keys[0]]
   const transfer = station.lines.length > 1
   const commuterOnly = station.lines.every(isCommuterRoute)
-  const rings = keys.length - 1
-  const r = 3.5 + rings * 2.5
-  const size = (r + 1.75) * 2
-
   return (
     <Marker longitude={station.lon} latitude={station.lat} anchor="center">
       <Popover modal={false}>
@@ -40,28 +92,11 @@ export function StationMark({ station }: { station: MapStation }) {
           aria-label={station.name}
           className="station-hit"
         >
-          <svg
-            className="station"
-            width={size}
-            height={size}
-            viewBox={`${-size / 2} ${-size / 2} ${size} ${size}`}
-          >
-            {[...keys].reverse().map((key, i) => {
-              const innermost = i === keys.length - 1
-              const ring = keys.length - 1 - i
-              return (
-                <circle
-                  key={key}
-                  cx={0}
-                  cy={0}
-                  r={3.5 + ring * 2.5}
-                  fill={innermost ? LINE_COLORS[key] : 'none'}
-                  stroke={innermost ? 'none' : LINE_COLORS[key]}
-                  strokeWidth={innermost ? 0 : 1.75}
-                />
-              )
-            })}
-          </svg>
+          <StationIcon
+            keys={keys}
+            commuterOnly={commuterOnly}
+            transfer={transfer}
+          />
         </PopoverTrigger>
         <PopoverContent
           side="top"
