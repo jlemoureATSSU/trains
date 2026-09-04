@@ -42,6 +42,10 @@
   transition: transform 0.45s ease-out;
 }
 
+.maplibregl-marker.vehicle-marker.is-sliding {
+  transition: transform 1s ease-out;
+}
+
 .station-hit,
 .vehicle-hit {
   display: flex;

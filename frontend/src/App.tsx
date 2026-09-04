@@ -6,7 +6,7 @@ import { VehicleMark } from '@/components/VehicleMark'
 import { linesToGeoJSON, lineLabelsToGeoJSON, headingToStop, prepareMap, snapToRoute } from './geo'
 import { applyMapScene } from './mapScene'
 import type { LatLon, Line, Vehicle } from './types'
-import { useVehicleMotion, VEHICLE_POLL_MS } from './useVehicleMotion'
+import { useVehicleMotion, VEHICLE_POLL_MS, VEHICLE_SLIDE_MS } from './useVehicleMotion'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import './App.css'
 
@@ -172,19 +172,32 @@ function VehicleLayer({
   const followed = focusedId
     ? marks.find((vehicle) => vehicle.id === focusedId)
     : undefined
+  const followKey = followed
+    ? `${followed.id}:${followed.lat}:${followed.lon}`
+    : null
+  const lastFollow = useRef<string | null>(null)
 
   useEffect(() => {
     if (focusedId && !flying && !followed) onDismissFocus()
   }, [focusedId, flying, followed, onDismissFocus])
 
   useEffect(() => {
+    if (!followKey) {
+      lastFollow.current = null
+      return
+    }
     if (!followed || flying) return
+    const prev = lastFollow.current
+    lastFollow.current = followKey
+    if (!prev || prev.split(':')[0] !== followed.id) return
+    if (prev === followKey) return
+    if (!followed.slide) return
     mapRef.current?.easeTo({
       center: [followed.lon, followed.lat],
       offset: [0, 80],
-      duration: 0,
+      duration: VEHICLE_SLIDE_MS,
     })
-  }, [followed, flying, mapRef])
+  }, [followed, followKey, flying, mapRef])
 
   return (
     <>
@@ -193,6 +206,7 @@ function VehicleLayer({
           key={v.id}
           vehicle={v}
           heading={v.heading}
+          slide={v.slide}
           dimmed={Boolean(highlightedRoute && v.route !== highlightedRoute)}
           focused={focusedId === v.id}
           anyFocused={anyFocused}

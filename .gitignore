@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 
 backend/.env
+frontend/.env
 
 node_modules/
 dist/

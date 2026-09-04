@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   CircleArrowDown,
   CircleArrowUp,
@@ -20,6 +20,7 @@ import {
 import { cn } from '@/lib/utils'
 import { routeBadge, routeTitle } from '@/routeMeta'
 import type { LatLon, NextStop, Vehicle } from '@/types'
+import { VEHICLE_SLIDE_MS } from '@/useVehicleMotion'
 
 type StatusKey = 'STOPPED_AT' | 'IN_TRANSIT_TO' | 'INCOMING_AT'
 
@@ -108,9 +109,32 @@ function Carriages({ count, color }: { count: number; color: string }) {
   )
 }
 
+function usePollSlide(lat: number, lon: number, slide: boolean) {
+  const node = useRef<HTMLDivElement>(null)
+
+  useLayoutEffect(() => {
+    const marker = node.current?.closest('.maplibregl-marker')
+    if (!marker) return
+    marker.classList.add('vehicle-marker')
+    if (!slide) return
+    marker.classList.add('is-sliding')
+    const id = window.setTimeout(
+      () => marker.classList.remove('is-sliding'),
+      VEHICLE_SLIDE_MS,
+    )
+    return () => {
+      window.clearTimeout(id)
+      marker.classList.remove('is-sliding')
+    }
+  }, [lat, lon, slide])
+
+  return node
+}
+
 export function VehicleMark({
   vehicle,
   heading = 0,
+  slide = false,
   nextStop,
   dimmed = false,
   focused,
@@ -121,6 +145,7 @@ export function VehicleMark({
 }: {
   vehicle: Vehicle & LatLon
   heading?: number
+  slide?: boolean
   nextStop?: NextStop | null
   dimmed?: boolean
   focused: boolean
@@ -130,6 +155,7 @@ export function VehicleMark({
   onGoToStation: (stop: NextStop) => void
 }) {
   const [hoverOpen, setHoverOpen] = useState(false)
+  const slideRef = usePollSlide(vehicle.lat, vehicle.lon, slide)
   const color = routeColor(vehicle.route)
   const title = vehicle.label || vehicle.id
   const status = vehicle.current_status
@@ -154,6 +180,7 @@ export function VehicleMark({
 
   return (
     <Marker longitude={vehicle.lon} latitude={vehicle.lat} anchor="center">
+      <div ref={slideRef}>
       <Popover
         modal={false}
         open={open}
@@ -313,6 +340,7 @@ export function VehicleMark({
           )}
         </PopoverContent>
       </Popover>
+      </div>
     </Marker>
   )
 }

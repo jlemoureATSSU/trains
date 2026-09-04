@@ -436,14 +436,6 @@ export function movedSince(a: LatLon, b: LatLon, meters = 20): boolean {
   return dist2(a, b) > deg * deg
 }
 
-export function lerpLatLon(from: LatLon, to: LatLon, t: number): LatLon {
-  const u = Math.max(0, Math.min(1, t))
-  return {
-    lat: from.lat + (to.lat - from.lat) * u,
-    lon: from.lon + (to.lon - from.lon) * u,
-  }
-}
-
 export function bearingDegrees(from: LatLon, to: LatLon): number | null {
   const lonScale = Math.cos((from.lat * Math.PI) / 180)
   const dx = (to.lon - from.lon) * lonScale
