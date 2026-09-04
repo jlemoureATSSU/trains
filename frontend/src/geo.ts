@@ -1,4 +1,5 @@
 import type { LatLon, Line, LinePoint, MapStation, Plot, Segment } from './types'
+import { lineLabel } from './routeMeta'
 
 function isCommuter(route: string | null | undefined): boolean {
   return (route || '').toLowerCase().startsWith('cr-')
@@ -146,6 +147,117 @@ export function linesToGeoJSON(lines: Line[]) {
           coordinates: line.points.map((p) => [p.lon, p.lat]),
         },
       })),
+  }
+}
+
+function distMeters(a: LatLon, b: LatLon): number {
+  const lonScale = Math.cos((a.lat * Math.PI) / 180)
+  const dx = (a.lon - b.lon) * lonScale * 111_320
+  const dy = (a.lat - b.lat) * 111_320
+  return Math.hypot(dx, dy)
+}
+
+function pathLengths(points: LatLon[]): { cum: number[]; total: number } {
+  const cum = [0]
+  for (let i = 0; i < points.length - 1; i++) {
+    cum.push(cum[i] + distMeters(points[i], points[i + 1]))
+  }
+  return { cum, total: cum[cum.length - 1] ?? 0 }
+}
+
+function sliceAroundLength(
+  points: LatLon[],
+  cum: number[],
+  target: number,
+  minMeters: number,
+): LatLon[] {
+  let i = 0
+  while (i < cum.length - 2 && cum[i + 1] < target) i++
+  let j = Math.min(i + 1, points.length - 1)
+  while (j < points.length - 1 && cum[j] - cum[i] < minMeters) j++
+  if (j <= i) return points.slice(i, i + 2)
+  return points.slice(i, j + 1)
+}
+
+function sliceCenter(points: LatLon[]): LatLon {
+  const mid = points[Math.floor(points.length / 2)] ?? points[0]
+  return { lat: mid.lat, lon: mid.lon }
+}
+
+const LABEL_GAP_METERS = 2_400
+const LABEL_SLICE_METERS = 450
+
+export function lineLabelsToGeoJSON(lines: Line[]) {
+  const byRoute = new Map<string, Line[]>()
+  for (const line of lines) {
+    if (line.points.length < 2) continue
+    const key = line.route || line.id
+    const group = byRoute.get(key) ?? []
+    group.push(line)
+    byRoute.set(key, group)
+  }
+
+  const features: {
+    type: 'Feature'
+    properties: { name: string; color: string; commuter: number }
+    geometry: { type: 'LineString'; coordinates: number[][] }
+  }[] = []
+  const placed: { name: string; lat: number; lon: number }[] = []
+
+  const tooClose = (name: string, at: LatLon) =>
+    placed.some(
+      (prev) =>
+        prev.name === name &&
+        distMeters(at, { lat: prev.lat, lon: prev.lon }) < LABEL_GAP_METERS,
+    )
+
+  for (const group of byRoute.values()) {
+    group.sort(
+      (a, b) => pathLengths(b.points).total - pathLengths(a.points).total,
+    )
+
+    group.forEach((line, index) => {
+      const name = lineLabel(line.route)
+      if (!name) return
+      const { cum, total } = pathLengths(line.points)
+      if (total < 80) return
+
+      const want = index === 0 ? (total > 16_000 ? 3 : 2) : 1
+      const fractions =
+        index === 0
+          ? Array.from({ length: want }, (_, k) => (k + 1) / (want + 1))
+          : [0.78]
+
+      for (const t of fractions) {
+        const slice = sliceAroundLength(
+          line.points,
+          cum,
+          total * t,
+          LABEL_SLICE_METERS,
+        )
+        if (slice.length < 2) continue
+        const at = sliceCenter(slice)
+        if (tooClose(name, at)) continue
+        placed.push({ name, lat: at.lat, lon: at.lon })
+        features.push({
+          type: 'Feature' as const,
+          properties: {
+            name,
+            color: line.color,
+            commuter: isCommuter(line.route) ? 1 : 0,
+          },
+          geometry: {
+            type: 'LineString' as const,
+            coordinates: slice.map((p) => [p.lon, p.lat]),
+          },
+        })
+      }
+    })
+  }
+
+  return {
+    type: 'FeatureCollection' as const,
+    features,
   }
 }
 

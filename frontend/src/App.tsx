@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Layer, Map, Source, type LayerProps, type MapRef } from '@vis.gl/react-maplibre'
-import { MAP_STYLES, MapControls, type MapStyleId } from '@/components/MapControls'
+import { MAP_STYLES, MapControls, LINE_MODES, type LineMode, type MapStyleId } from '@/components/MapControls'
 import { StationMark } from '@/components/StationMark'
 import { VehicleMark } from '@/components/VehicleMark'
-import { linesToGeoJSON, prepareMap } from './geo'
+import { linesToGeoJSON, lineLabelsToGeoJSON, prepareMap } from './geo'
 import { applyMapScene, GLOBE_SKY } from './mapScene'
 import type { Line, Vehicle } from './types'
 import { useVehicleMotion, VEHICLE_POLL_MS } from './useVehicleMotion'
@@ -77,6 +77,46 @@ const lineCore: LayerProps = {
   },
 }
 
+const lineNames: LayerProps = {
+  id: 'mbta-line-labels',
+  type: 'symbol',
+  minzoom: 11,
+  layout: {
+    'symbol-placement': 'line-center',
+    'symbol-spacing': 1,
+    'text-field': ['get', 'name'],
+    'text-size': [
+      'interpolate',
+      ['linear'],
+      ['zoom'],
+      11,
+      11,
+      14,
+      13,
+      16,
+      15,
+    ],
+    'text-font': ['Noto Sans Regular'],
+    'text-letter-spacing': 0.14,
+    'text-transform': 'uppercase',
+    'text-max-angle': 35,
+    'text-padding': 2,
+    'text-anchor': 'center',
+    'text-keep-upright': true,
+    'text-optional': true,
+    'symbol-sort-key': ['-', 1, ['get', 'commuter']],
+    'text-allow-overlap': false,
+    'text-ignore-placement': false,
+  },
+  paint: {
+    'text-color': '#ffffff',
+    'text-halo-color': ['get', 'color'],
+    'text-halo-width': 2.4,
+    'text-halo-blur': 0.15,
+    'text-opacity': 0.96,
+  },
+}
+
 function VehicleLayer({
   vehicles,
   plot,
@@ -104,9 +144,15 @@ function App() {
   const [terrain, setTerrain] = useState(false)
   const [buildings, setBuildings] = useState(false)
   const [labels, setLabels] = useState(true)
+  const [lineMode, setLineMode] = useState<LineMode>('all')
   const [viewState, setViewState] = useState(BOSTON)
+  const routeTypes = LINE_MODES[lineMode].routeTypes
   const plot = useMemo(() => prepareMap(lines), [lines])
   const lineGeoJSON = useMemo(() => linesToGeoJSON(plot.lines), [plot.lines])
+  const lineLabelGeoJSON = useMemo(
+    () => lineLabelsToGeoJSON(plot.lines),
+    [plot.lines],
+  )
   const scene = useMemo(
     () => ({ buildings, labels, terrain }),
     [buildings, labels, terrain],
@@ -118,19 +164,30 @@ function App() {
   }, [scene, styleId])
 
   useEffect(() => {
-    fetch(`${API_BASE}/lines`)
+    let cancelled = false
+    fetch(`${API_BASE}/lines?route_type=${routeTypes}`)
       .then((res) => {
         if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
         return res.json() as Promise<Line[]>
       })
-      .then(setLines)
-      .catch((err: Error) => setError(err.message))
-  }, [])
+      .then((data) => {
+        if (!cancelled) {
+          setLines(data)
+          setError(null)
+        }
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setError(err.message)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [routeTypes])
 
   useEffect(() => {
     let cancelled = false
     const load = () => {
-      fetch(`${API_BASE}/vehicles?route_type=0,1,2`)
+      fetch(`${API_BASE}/vehicles?route_type=${routeTypes}`)
         .then((res) => {
           if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
           return res.json() as Promise<Vehicle[]>
@@ -146,7 +203,7 @@ function App() {
       cancelled = true
       clearInterval(id)
     }
-  }, [])
+  }, [routeTypes])
 
   return (
     <main className="page">
@@ -160,10 +217,12 @@ function App() {
           terrain={terrain}
           buildings={buildings}
           labels={labels}
+          lineMode={lineMode}
           onGlobeChange={setGlobe}
           onTerrainChange={setTerrain}
           onBuildingsChange={setBuildings}
           onLabelsChange={setLabels}
+          onLineModeChange={setLineMode}
           onPitchChange={(pitch) => setViewState((view) => ({ ...view, pitch }))}
           onBearingChange={(bearing) =>
             setViewState((view) => ({ ...view, bearing }))
@@ -202,6 +261,11 @@ function App() {
             <Source id="mbta-lines" type="geojson" data={lineGeoJSON}>
               <Layer {...lineGlow} />
               <Layer {...lineCore} />
+            </Source>
+          )}
+          {lineLabelGeoJSON.features.length > 0 && (
+            <Source id="mbta-line-labels" type="geojson" data={lineLabelGeoJSON}>
+              <Layer {...lineNames} />
             </Source>
           )}
           {plot.stations.map((s) => (

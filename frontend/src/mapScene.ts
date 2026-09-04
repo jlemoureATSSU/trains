@@ -43,8 +43,24 @@ function buildingSource(map: MaplibreMap): { source: string; sourceLayer: string
 
 function applyLabels(map: MaplibreMap, show: boolean) {
   for (const layer of map.getStyle()?.layers ?? []) {
-    if (layer.type === 'symbol') setVisibility(map, layer.id, show)
+    if (layer.type !== 'symbol') continue
+    if (layer.id.startsWith('mbta-')) continue
+    setVisibility(map, layer.id, show)
   }
+}
+
+function applyLineLabelFont(map: MaplibreMap) {
+  if (!map.getLayer('mbta-line-labels')) return
+  const stacks = (map.getStyle()?.layers ?? [])
+    .filter((layer) => layer.type === 'symbol' && !layer.id.startsWith('mbta-'))
+    .map(
+      (layer) =>
+        (layer.layout as { 'text-font'?: string[] } | undefined)?.['text-font'],
+    )
+    .filter((font): font is string[] => Array.isArray(font) && font.length > 0)
+  if (stacks.length === 0) return
+  const bold = stacks.find((font) => font.some((name) => /bold/i.test(name)))
+  map.setLayoutProperty('mbta-line-labels', 'text-font', bold ?? stacks[0])
 }
 
 function applyBuildings(map: MaplibreMap, enabled: boolean) {
@@ -120,6 +136,7 @@ export function applyMapScene(map: MaplibreMap, scene: MapScene) {
     applyTerrain(map, scene.terrain)
     applyBuildings(map, scene.buildings)
     applyLabels(map, scene.labels)
+    applyLineLabelFont(map)
   } catch {
     // Style swaps can race addLayer/addSource; the next idle pass retries.
   }

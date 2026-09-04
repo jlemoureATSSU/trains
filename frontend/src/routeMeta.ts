@@ -19,6 +19,14 @@ export function routeTitle(route?: string) {
   return route
 }
 
+export function lineLabel(route?: string) {
+  if (!route) return ''
+  if (route.startsWith('Green-')) return `Green ${route.slice(6)}`
+  if (route.startsWith('CR-')) return route.slice(3).replaceAll('-', ' ')
+  if (/mattapan/i.test(route)) return 'Mattapan'
+  return route
+}
+
 export function isCommuterRoute(route?: string) {
   return (route || '').toLowerCase().startsWith('cr-')
 }

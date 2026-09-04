@@ -9,6 +9,7 @@ import {
   RotateCcw,
   Type,
 } from 'lucide-react'
+import { LINE_COLORS } from '@/colors'
 import { Button } from '@/components/ui/button'
 import {
   Popover,
@@ -79,7 +80,36 @@ export const MAP_STYLES = {
 
 export type MapStyleId = keyof typeof MAP_STYLES
 
-const LINE_BAR = ['#00843D', '#ED8B00', '#DA291C', '#003DA5', '#80276C']
+export const LINE_MODES = {
+  all: {
+    label: 'All lines',
+    routeTypes: '0,1,2',
+    swatch: [
+      LINE_COLORS.green,
+      LINE_COLORS.orange,
+      LINE_COLORS.red,
+      LINE_COLORS.blue,
+      LINE_COLORS.purple,
+    ],
+  },
+  subway: {
+    label: 'Subway',
+    routeTypes: '0,1',
+    swatch: [
+      LINE_COLORS.green,
+      LINE_COLORS.orange,
+      LINE_COLORS.red,
+      LINE_COLORS.blue,
+    ],
+  },
+  commuter: {
+    label: 'Commuter',
+    routeTypes: '2',
+    swatch: [LINE_COLORS.purple],
+  },
+} as const
+
+export type LineMode = keyof typeof LINE_MODES
 
 function sliderValue(value: number | readonly number[]): number {
   return typeof value === 'number' ? value : (value[0] ?? 0)
@@ -121,6 +151,7 @@ type MapControlsProps = {
   terrain: boolean
   buildings: boolean
   labels: boolean
+  lineMode: LineMode
   onStyleChange: (styleId: MapStyleId) => void
   onPitchChange: (pitch: number) => void
   onBearingChange: (bearing: number) => void
@@ -128,6 +159,7 @@ type MapControlsProps = {
   onTerrainChange: (terrain: boolean) => void
   onBuildingsChange: (buildings: boolean) => void
   onLabelsChange: (labels: boolean) => void
+  onLineModeChange: (mode: LineMode) => void
   onReset: () => void
   onResetLocation: () => void
 }
@@ -140,6 +172,7 @@ export function MapControls({
   terrain,
   buildings,
   labels,
+  lineMode,
   onStyleChange,
   onPitchChange,
   onBearingChange,
@@ -147,6 +180,7 @@ export function MapControls({
   onTerrainChange,
   onBuildingsChange,
   onLabelsChange,
+  onLineModeChange,
   onReset,
   onResetLocation,
 }: MapControlsProps) {
@@ -170,7 +204,7 @@ export function MapControls({
         className="w-80 gap-0 overflow-hidden p-0"
       >
         <div className="flex h-1">
-          {LINE_BAR.map((color) => (
+          {LINE_MODES[lineMode].swatch.map((color) => (
             <span
               key={color}
               className="h-full flex-1"
@@ -182,11 +216,54 @@ export function MapControls({
         <div className="max-h-[min(80vh,40rem)] overflow-y-auto">
           <div className="px-3 pt-2.5 pb-2">
             <p className="text-[11px] font-medium tracking-wide text-white/55 uppercase">
-              View
+              Routes
             </p>
             <PopoverTitle className="text-sm font-semibold tracking-tight">
-              Camera
+              Lines
             </PopoverTitle>
+          </div>
+
+          <div className="grid grid-cols-3 gap-1.5 px-3">
+            {(Object.keys(LINE_MODES) as LineMode[]).map((id) => {
+              const mode = LINE_MODES[id]
+              const selected = id === lineMode
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => onLineModeChange(id)}
+                  className={cn(
+                    'overflow-hidden rounded-md text-left ring-1 transition-colors',
+                    selected
+                      ? 'bg-sky-500/15 ring-sky-400/50'
+                      : 'bg-white/5 ring-white/15 hover:bg-white/10',
+                  )}
+                >
+                  <span className="flex h-1.5">
+                    {mode.swatch.map((color) => (
+                      <span
+                        key={color}
+                        className="h-full flex-1"
+                        style={{ background: color }}
+                      />
+                    ))}
+                  </span>
+                  <span className="flex items-center justify-between px-1.5 py-1.5 text-[11px] font-medium">
+                    {mode.label}
+                    {selected && (
+                      <span className="size-1.5 rounded-full bg-sky-300" />
+                    )}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="px-3 pt-3 pb-2">
+            <p className="text-[11px] font-medium tracking-wide text-white/55 uppercase">
+              View
+            </p>
+            <p className="text-sm font-semibold tracking-tight">Camera</p>
           </div>
 
           <div className="grid grid-cols-3 gap-1.5 px-3">
