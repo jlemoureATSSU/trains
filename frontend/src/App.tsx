@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Layer, Map, Marker, Source, type LayerProps } from '@vis.gl/react-maplibre'
+import { Layer, Map, Source, type LayerProps } from '@vis.gl/react-maplibre'
 import { MAP_STYLES, MapControls, type MapStyleId } from '@/components/MapControls'
-import { LINE_COLORS, darken, routeColor, stationColors } from './colors'
+import { StationMark } from '@/components/StationMark'
+import { VehicleMark } from '@/components/VehicleMark'
 import { linesToGeoJSON, prepareMap, snapToRoute } from './geo'
-import type { LatLon, Line, MapStation, Vehicle } from './types'
+import type { Line, Vehicle } from './types'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import './App.css'
 
@@ -37,64 +38,6 @@ const lineLayer: LayerProps = {
     ],
     'line-opacity': 0.92,
   },
-}
-
-function StationDot({ station }: { station: MapStation }) {
-  const colors = stationColors(station.lines)
-  if (colors.length === 0) return null
-
-  const rings = colors.length - 1
-  const r = 3.5 + rings * 2.5
-  const size = (r + 1.75) * 2
-
-  return (
-    <Marker longitude={station.lon} latitude={station.lat} anchor="center">
-      <svg
-        className="station"
-        width={size}
-        height={size}
-        viewBox={`${-size / 2} ${-size / 2} ${size} ${size}`}
-      >
-        <title>{station.name}</title>
-        {[...colors].reverse().map((key, i) => {
-          const innermost = i === colors.length - 1
-          const ring = colors.length - 1 - i
-          return (
-            <circle
-              key={key}
-              cx={0}
-              cy={0}
-              r={3.5 + ring * 2.5}
-              fill={innermost ? LINE_COLORS[key] : 'none'}
-              stroke={innermost ? 'none' : LINE_COLORS[key]}
-              strokeWidth={innermost ? 0 : 1.75}
-            />
-          )
-        })}
-      </svg>
-    </Marker>
-  )
-}
-
-function VehicleMark({ vehicle }: { vehicle: Vehicle & LatLon }) {
-  const color = routeColor(vehicle.route)
-  return (
-    <Marker longitude={vehicle.lon} latitude={vehicle.lat} anchor="center">
-      <svg className="vehicle" width="14" height="14" viewBox="-7 -7 14 14">
-        <title>
-          {vehicle.label || vehicle.id}
-          {vehicle.route ? ` · ${vehicle.route}` : ''}
-        </title>
-        <polygon
-          points="0,-5.5 4.8,2.8 -4.8,2.8"
-          fill={color}
-          stroke={darken(color)}
-          strokeLinejoin="round"
-          strokeWidth="1.2"
-        />
-      </svg>
-    </Marker>
-  )
 }
 
 function App() {
@@ -192,7 +135,7 @@ function App() {
             </Source>
           )}
           {plot.stations.map((s) => (
-            <StationDot key={s.name} station={s} />
+            <StationMark key={s.name} station={s} />
           ))}
           {vehicleMarks.map((v) => (
             <VehicleMark key={v.id} vehicle={v} />

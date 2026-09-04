@@ -30,3 +30,16 @@
   display: block;
   overflow: visible;
 }
+
+.station-hit,
+.vehicle-hit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  margin: -8px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: inherit;
+}

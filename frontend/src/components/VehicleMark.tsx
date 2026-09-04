@@ -1,0 +1,200 @@
+import {
+  CircleArrowDown,
+  CircleArrowUp,
+  CircleHelp,
+  CirclePause,
+  Clock,
+  Gauge,
+  Radio,
+} from 'lucide-react'
+import { Marker } from '@vis.gl/react-maplibre'
+import { darken, routeColor } from '@/colors'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTitle,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import { cn } from '@/lib/utils'
+import { routeBadge, routeTitle } from '@/routeMeta'
+import type { LatLon, Vehicle } from '@/types'
+
+type StatusKey = 'STOPPED_AT' | 'IN_TRANSIT_TO' | 'INCOMING_AT'
+
+const STATUS: Record<
+  StatusKey,
+  { label: string; className: string; Icon: typeof CirclePause }
+> = {
+  STOPPED_AT: {
+    label: 'Stopped',
+    className: 'bg-rose-500/15 text-rose-300 ring-rose-400/35',
+    Icon: CirclePause,
+  },
+  IN_TRANSIT_TO: {
+    label: 'Moving',
+    className: 'bg-emerald-500/15 text-emerald-300 ring-emerald-400/35',
+    Icon: Gauge,
+  },
+  INCOMING_AT: {
+    label: 'Arriving',
+    className: 'bg-violet-500/15 text-violet-300 ring-violet-400/35',
+    Icon: Radio,
+  },
+}
+
+function mph(mps?: number) {
+  if (!Number.isFinite(mps)) return null
+  return Math.round((mps as number) * 2.23694)
+}
+
+function updatedLabel(iso?: string) {
+  if (!iso) return null
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return null
+  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+}
+
+function Carriages({ count, color }: { count: number; color: string }) {
+  const cars = Math.min(Math.max(count, 0), 8)
+  if (cars === 0) return <span className="text-white/40">—</span>
+  return (
+    <div className="flex items-center gap-0.5" aria-hidden>
+      {Array.from({ length: cars }, (_, i) => (
+        <span
+          key={i}
+          className="h-3.5 w-2 rounded-[3px] first:rounded-l-md last:rounded-r-md"
+          style={{ background: color }}
+        />
+      ))}
+    </div>
+  )
+}
+
+export function VehicleMark({ vehicle }: { vehicle: Vehicle & LatLon }) {
+  const color = routeColor(vehicle.route)
+  const title = vehicle.label || vehicle.id
+  const status = vehicle.current_status
+    ? STATUS[vehicle.current_status as StatusKey]
+    : undefined
+  const inbound = vehicle.direction_id === 1
+  const outbound = vehicle.direction_id === 0
+  const DirectionIcon = inbound
+    ? CircleArrowDown
+    : outbound
+      ? CircleArrowUp
+      : CircleHelp
+  const speed = mph(vehicle.speed)
+  const updated = updatedLabel(vehicle.updated_at)
+  const StatusIcon = status?.Icon
+
+  return (
+    <Marker longitude={vehicle.lon} latitude={vehicle.lat} anchor="center">
+      <Popover modal={false}>
+        <PopoverTrigger
+          nativeButton
+          openOnHover
+          delay={80}
+          closeDelay={120}
+          aria-label={`${title}${vehicle.route ? ` · ${vehicle.route}` : ''}`}
+          className="vehicle-hit"
+        >
+          <svg className="vehicle" width="14" height="14" viewBox="-7 -7 14 14">
+            <polygon
+              points="0,-5.5 4.8,2.8 -4.8,2.8"
+              fill={color}
+              stroke={darken(color)}
+              strokeLinejoin="round"
+              strokeWidth="1.2"
+            />
+          </svg>
+        </PopoverTrigger>
+        <PopoverContent
+          side="top"
+          align="center"
+          className="w-64 gap-0 overflow-hidden p-0"
+        >
+          <div className="h-1" style={{ background: color }} />
+          <div className="flex items-start gap-2.5 px-3 pt-2.5 pb-2">
+            <span
+              className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md text-xs font-bold tracking-wide text-white"
+              style={{ background: color }}
+            >
+              {routeBadge(vehicle.route)}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[11px] font-medium tracking-wide text-white/55 uppercase">
+                {routeTitle(vehicle.route)}
+              </p>
+              <PopoverTitle className="truncate text-sm font-semibold tracking-tight">
+                {title}
+              </PopoverTitle>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-1.5 px-3">
+            <div
+              className={cn(
+                'flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium ring-1',
+                inbound && 'bg-sky-500/15 text-sky-300 ring-sky-400/35',
+                outbound && 'bg-amber-500/15 text-amber-300 ring-amber-400/35',
+                !inbound &&
+                  !outbound &&
+                  'bg-white/5 text-white/50 ring-white/15',
+              )}
+            >
+              <DirectionIcon className="size-3.5" />
+              {inbound ? 'Inbound' : outbound ? 'Outbound' : 'Unknown'}
+            </div>
+            <div
+              className={cn(
+                'flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium ring-1',
+                status?.className ?? 'bg-white/5 text-white/50 ring-white/15',
+              )}
+            >
+              {StatusIcon ? (
+                <StatusIcon className="size-3.5" />
+              ) : (
+                <CircleHelp className="size-3.5" />
+              )}
+              {status?.label ?? 'Unknown'}
+            </div>
+          </div>
+
+          <div className="mt-2 grid grid-cols-2 gap-px bg-white/10">
+            <div className="bg-popover px-3 py-2.5">
+              <p className="text-[10px] tracking-wide text-white/40 uppercase">
+                Speed
+              </p>
+              <p className="mt-0.5 text-lg leading-none font-semibold tabular-nums">
+                {speed == null ? '—' : speed}
+                {speed != null && (
+                  <span className="ml-1 text-[10px] font-medium text-white/40">
+                    mph
+                  </span>
+                )}
+              </p>
+            </div>
+            <div className="bg-popover px-3 py-2.5">
+              <p className="text-[10px] tracking-wide text-white/40 uppercase">
+                {vehicle.carriages === 1 ? 'Car' : 'Cars'}
+              </p>
+              <div className="mt-1.5 flex items-center justify-between gap-2">
+                <Carriages count={vehicle.carriages} color={color} />
+                <span className="text-sm font-semibold tabular-nums">
+                  {vehicle.carriages}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {updated && (
+            <div className="flex items-center gap-1.5 px-3 py-2 text-[11px] text-white/40">
+              <Clock className="size-3" />
+              Updated {updated}
+            </div>
+          )}
+        </PopoverContent>
+      </Popover>
+    </Marker>
+  )
+}
