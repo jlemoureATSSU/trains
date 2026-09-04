@@ -5,10 +5,11 @@ import {
   CirclePause,
   Clock,
   Gauge,
+  MapPin,
   Radio,
 } from 'lucide-react'
 import { Marker } from '@vis.gl/react-maplibre'
-import { routeColor } from '@/colors'
+import { lighten, routeColor, withAlpha } from '@/colors'
 import {
   Popover,
   PopoverContent,
@@ -17,7 +18,7 @@ import {
 } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import { routeBadge, routeTitle } from '@/routeMeta'
-import type { LatLon, Vehicle } from '@/types'
+import type { LatLon, NextStop, Vehicle } from '@/types'
 
 type StatusKey = 'STOPPED_AT' | 'IN_TRANSIT_TO' | 'INCOMING_AT'
 
@@ -109,9 +110,11 @@ function Carriages({ count, color }: { count: number; color: string }) {
 export function VehicleMark({
   vehicle,
   heading = 0,
+  nextStop,
 }: {
   vehicle: Vehicle & LatLon
   heading?: number
+  nextStop?: NextStop | null
 }) {
   const color = routeColor(vehicle.route)
   const title = vehicle.label || vehicle.id
@@ -204,6 +207,30 @@ export function VehicleMark({
               {status?.label ?? 'Unknown'}
             </div>
           </div>
+
+          {nextStop && (
+            <div className="mt-2 px-3">
+              <div
+                className="rounded-md px-2 py-1.5"
+                style={{
+                  background: withAlpha(color, 0.22),
+                  color: lighten(color, 0.45),
+                  boxShadow: `inset 0 0 0 1px ${withAlpha(color, 0.45)}`,
+                }}
+              >
+                <p className="flex items-center gap-1 text-[10px] font-medium tracking-wide uppercase opacity-80">
+                  <MapPin className="size-3" />
+                  Next stop
+                </p>
+                <p className="mt-1 truncate text-xs font-medium leading-tight">
+                  {nextStop.name}
+                </p>
+                <p className="text-[10px] tabular-nums opacity-60">
+                  {nextStop.miles.toFixed(2)} mi
+                </p>
+              </div>
+            </div>
+          )}
 
           <div
             className={cn(

@@ -1,4 +1,13 @@
-import type { LatLon, Line, LinePoint, MapStation, Plot, Segment } from './types'
+import type {
+  LatLon,
+  Line,
+  LineNeighbors,
+  LinePoint,
+  MapStation,
+  NextStop,
+  Plot,
+  Segment,
+} from './types'
 import { lineLabel } from './routeMeta'
 
 function isCommuter(route: string | null | undefined): boolean {
@@ -7,6 +16,17 @@ function isCommuter(route: string | null | undefined): boolean {
 
 function nameKey(name: string | null | undefined): string {
   return (name || '').toLowerCase()
+}
+
+function distMeters(a: LatLon, b: LatLon): number {
+  const lonScale = Math.cos((a.lat * Math.PI) / 180)
+  const dx = (a.lon - b.lon) * lonScale * 111_320
+  const dy = (a.lat - b.lat) * 111_320
+  return Math.hypot(dx, dy)
+}
+
+function milesBetween(a: LatLon, b: LatLon): number {
+  return distMeters(a, b) / 1609.344
 }
 
 function stationsFromLines(lines: Line[]): MapStation[] {
@@ -24,6 +44,7 @@ function stationsFromLines(lines: Line[]): MapStation[] {
           lon: point.lon,
           lines: [],
           fromCr: isCommuter(line.route),
+          neighbors: [],
         }
         byName.set(key, station)
       } else if (station.fromCr && !isCommuter(line.route)) {
@@ -39,7 +60,94 @@ function stationsFromLines(lines: Line[]): MapStation[] {
   return [...byName.values()]
 }
 
-function usablePoints(points: LinePoint[] | undefined): LinePoint[] {
+function uniqueNexts(here: LatLon, candidates: { name: string; lat: number; lon: number }[]) {
+  const byName = new Map<string, NextStop>()
+  for (const next of candidates) {
+    const key = nameKey(next.name)
+    if (!key) continue
+    const miles = milesBetween(here, next)
+    const prev = byName.get(key)
+    if (!prev || miles < prev.miles) {
+      byName.set(key, { name: next.name, miles })
+    }
+  }
+  return [...byName.values()]
+}
+
+function neighborKey(row: { outbound: NextStop[]; inbound: NextStop[] }) {
+  const names = (stops: NextStop[]) =>
+    stops
+      .map((stop) => nameKey(stop.name))
+      .sort()
+      .join('|')
+  return `${names(row.outbound)}::${names(row.inbound)}`
+}
+
+function sequencesByRoute(
+  lines: Line[],
+  byName: Map<string, MapStation>,
+) {
+  const map = new Map<string, { name: string; lat: number; lon: number }[][]>()
+  for (const line of lines) {
+    if (!line.route) continue
+    const points = usablePoints(line.points).map((point) => {
+      const station = byName.get(nameKey(point.name))
+      return {
+        name: point.name,
+        lat: station?.lat ?? point.lat,
+        lon: station?.lon ?? point.lon,
+      }
+    })
+    if (points.length < 2) continue
+    const list = map.get(line.route) ?? []
+    list.push(points)
+    map.set(line.route, list)
+  }
+  return map
+}
+
+function neighborsForStation(
+  station: MapStation,
+  sequences: Map<string, { name: string; lat: number; lon: number }[][]>,
+): LineNeighbors[] {
+  const here = { lat: station.lat, lon: station.lon }
+  const key = nameKey(station.name)
+  const rows: LineNeighbors[] = []
+
+  for (const route of station.lines) {
+    const outbound: { name: string; lat: number; lon: number }[] = []
+    const inbound: { name: string; lat: number; lon: number }[] = []
+    for (const seq of sequences.get(route) ?? []) {
+      const i = seq.findIndex((point) => nameKey(point.name) === key)
+      if (i < 0) continue
+      if (seq[i + 1]) outbound.push(seq[i + 1])
+      if (seq[i - 1]) inbound.push(seq[i - 1])
+    }
+    rows.push({
+      routes: [route],
+      outbound: uniqueNexts(here, outbound),
+      inbound: uniqueNexts(here, inbound),
+    })
+  }
+
+  const merged = new Map<string, LineNeighbors>()
+  for (const row of rows) {
+    const id = neighborKey(row)
+    const existing = merged.get(id)
+    if (!existing) {
+      merged.set(id, row)
+      continue
+    }
+    for (const route of row.routes) {
+      if (!existing.routes.includes(route)) existing.routes.push(route)
+    }
+  }
+  return [...merged.values()]
+}
+
+function usablePoints(
+  points: LinePoint[] | undefined,
+): Array<LinePoint & { name: string }> {
   return (points ?? []).filter(
     (p): p is LinePoint & { name: string } =>
       Boolean(p.name) && Number.isFinite(p.lat) && Number.isFinite(p.lon),
@@ -69,7 +177,7 @@ function threadCommuter(lines: Line[]): Line[] {
       return { ...line, points }
     }
 
-    const threaded = [points[0]]
+    const threaded: LinePoint[] = [points[0]]
     for (let i = 0; i < points.length - 1; i++) {
       const a = nameKey(points[i].name)
       const b = nameKey(points[i + 1].name)
@@ -89,6 +197,10 @@ function threadCommuter(lines: Line[]): Line[] {
 export function prepareMap(lines: Line[]): Plot {
   const stations = stationsFromLines(lines)
   const byName = new Map(stations.map((s) => [s.name.toLowerCase(), s]))
+  const sequences = sequencesByRoute(lines, byName)
+  for (const station of stations) {
+    station.neighbors = neighborsForStation(station, sequences)
+  }
   const drawn = threadCommuter(lines)
   const crFirst = (a: Line, b: Line) =>
     Number(isCommuter(b.route)) - Number(isCommuter(a.route))
@@ -128,7 +240,7 @@ export function prepareMap(lines: Line[]): Plot {
     }
   }
 
-  return { stations, lines: mappedLines, segmentsByRoute, pointsByRoute }
+  return { stations, lines: mappedLines, segmentsByRoute, pointsByRoute, stopsByRoute: sequences }
 }
 
 export function linesToGeoJSON(lines: Line[]) {
@@ -148,13 +260,6 @@ export function linesToGeoJSON(lines: Line[]) {
         },
       })),
   }
-}
-
-function distMeters(a: LatLon, b: LatLon): number {
-  const lonScale = Math.cos((a.lat * Math.PI) / 180)
-  const dx = (a.lon - b.lon) * lonScale * 111_320
-  const dy = (a.lat - b.lat) * 111_320
-  return Math.hypot(dx, dy)
 }
 
 function pathLengths(points: LatLon[]): { cum: number[]; total: number } {
@@ -355,4 +460,70 @@ export function nextStopToward(
   const next = best + step
   if (next >= 0 && next < points.length) return points[next]
   return null
+}
+
+type NamedStop = { name: string; lat: number; lon: number }
+
+function nearestStopIndex(point: LatLon, stops: NamedStop[]) {
+  let best = 0
+  let bestD = Infinity
+  for (let i = 0; i < stops.length; i++) {
+    const d = distMeters(point, stops[i])
+    if (d < bestD) {
+      bestD = d
+      best = i
+    }
+  }
+  return { index: best, meters: bestD }
+}
+
+function nearestSegmentIndex(point: LatLon, stops: NamedStop[]) {
+  let best = 0
+  let bestD = Infinity
+  for (let i = 0; i < stops.length - 1; i++) {
+    const snapped = nearestOnSegments(point, [{ a: stops[i], b: stops[i + 1] }])
+    const d = distMeters(point, snapped)
+    if (d < bestD) {
+      bestD = d
+      best = i
+    }
+  }
+  return best
+}
+
+export function headingToStop(
+  point: LatLon,
+  route: string | null | undefined,
+  directionId: number | null | undefined,
+  status: string | undefined,
+  stopsByRoute: Map<string, NamedStop[][]>,
+): NextStop | null {
+  if (!route) return null
+  const sequences = stopsByRoute.get(route)
+  if (!sequences?.length) return null
+
+  let seq = sequences[0]
+  let nearest = { index: 0, meters: Infinity }
+  for (const candidate of sequences) {
+    const found = nearestStopIndex(point, candidate)
+    if (found.meters < nearest.meters) {
+      nearest = found
+      seq = candidate
+    }
+  }
+  if (seq.length < 2) return null
+
+  const step = directionId === 1 ? -1 : 1
+  let target: NamedStop | undefined
+
+  if (nearest.meters < 80) {
+    target =
+      status === 'STOPPED_AT' ? seq[nearest.index + step] : seq[nearest.index]
+  } else {
+    const seg = nearestSegmentIndex(point, seq)
+    target = directionId === 1 ? seq[seg] : seq[seg + 1]
+  }
+
+  if (!target) return null
+  return { name: target.name, miles: milesBetween(point, target) }
 }

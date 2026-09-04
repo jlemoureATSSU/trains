@@ -46,12 +46,24 @@ export type LatLon = {
   lon: number
 }
 
+export type NextStop = {
+  name: string
+  miles: number
+}
+
+export type LineNeighbors = {
+  routes: string[]
+  outbound: NextStop[]
+  inbound: NextStop[]
+}
+
 export type MapStation = {
   name: string
   lat: number
   lon: number
   lines: string[]
   fromCr: boolean
+  neighbors: LineNeighbors[]
 }
 
 export type Segment = {
@@ -64,4 +76,5 @@ export type Plot = {
   lines: Line[]
   segmentsByRoute: Map<string, Segment[]>
   pointsByRoute: Map<string, LatLon[]>
+  stopsByRoute: Map<string, { name: string; lat: number; lon: number }[][]>
 }

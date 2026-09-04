@@ -1,6 +1,6 @@
-import { ArrowLeftRight, MapPin, TrainFront } from 'lucide-react'
+import { ArrowLeftRight, CircleArrowDown, CircleArrowUp, MapPin, TrainFront } from 'lucide-react'
 import { Marker } from '@vis.gl/react-maplibre'
-import { LINE_COLORS, routeColor, stationColors } from '@/colors'
+import { LINE_COLORS, lighten, routeColor, stationColors, withAlpha } from '@/colors'
 import {
   Popover,
   PopoverContent,
@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import { isCommuterRoute, routeBadge } from '@/routeMeta'
-import type { MapStation } from '@/types'
+import type { MapStation, NextStop } from '@/types'
 
 function StationIcon({
   keys,
@@ -73,6 +73,48 @@ function formatCoord(lat: number, lon: number) {
   return `${Math.abs(lat).toFixed(4)}° ${ns}  ${Math.abs(lon).toFixed(4)}° ${ew}`
 }
 
+function NextStops({
+  label,
+  Icon,
+  stops,
+  color,
+  shade,
+}: {
+  label: string
+  Icon: typeof CircleArrowUp
+  stops: NextStop[]
+  color: string
+  shade: 'light' | 'deep'
+}) {
+  const fill = withAlpha(color, shade === 'light' ? 0.28 : 0.14)
+  const ring = withAlpha(color, shade === 'light' ? 0.5 : 0.35)
+  const text = lighten(color, shade === 'light' ? 0.55 : 0.32)
+
+  return (
+    <div
+      className="rounded-md px-2 py-1.5"
+      style={{ background: fill, color: text, boxShadow: `inset 0 0 0 1px ${ring}` }}
+    >
+      <p className="flex items-center gap-1 text-[10px] font-medium tracking-wide uppercase opacity-80">
+        <Icon className="size-3" />
+        {label}
+      </p>
+      {stops.length === 0 ? (
+        <p className="mt-1 truncate text-xs opacity-55">Terminus</p>
+      ) : (
+        stops.map((stop) => (
+          <div key={stop.name} className="mt-1 min-w-0">
+            <p className="truncate text-xs font-medium leading-tight">{stop.name}</p>
+            <p className="text-[10px] tabular-nums opacity-60">
+              {stop.miles.toFixed(2)} mi
+            </p>
+          </div>
+        ))
+      )}
+    </div>
+  )
+}
+
 export function StationMark({ station }: { station: MapStation }) {
   const keys = stationColors(station.lines)
   if (keys.length === 0) return null
@@ -101,7 +143,7 @@ export function StationMark({ station }: { station: MapStation }) {
         <PopoverContent
           side="top"
           align="center"
-          className="w-64 gap-0 overflow-hidden p-0"
+          className="w-72 gap-0 overflow-hidden p-0"
         >
           <div className="flex h-1">
             {colors.map((color, i) => (
@@ -168,7 +210,48 @@ export function StationMark({ station }: { station: MapStation }) {
             </div>
           </div>
 
-          <div className="mt-2 flex items-center gap-1.5 px-3 py-2 text-[11px] text-white/40">
+          {station.neighbors.length > 0 && (
+            <div className="mt-2 border-t border-white/10">
+              {station.neighbors.map((group) => (
+                <div
+                  key={group.routes.join('-')}
+                  className="border-b border-white/10 px-3 py-2 last:border-b-0"
+                >
+                  {station.neighbors.length > 1 && (
+                    <div className="mb-1.5 flex flex-wrap gap-1">
+                      {group.routes.map((line) => (
+                        <span
+                          key={line}
+                          className="rounded px-1 py-px text-[9px] font-bold tracking-wide text-white uppercase"
+                          style={{ background: routeColor(line) }}
+                        >
+                          {routeBadge(line)}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <NextStops
+                      label="Outbound"
+                      Icon={CircleArrowUp}
+                      stops={group.outbound}
+                      color={routeColor(group.routes[0])}
+                      shade="light"
+                    />
+                    <NextStops
+                      label="Inbound"
+                      Icon={CircleArrowDown}
+                      stops={group.inbound}
+                      color={routeColor(group.routes[0])}
+                      shade="deep"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex items-center gap-1.5 px-3 py-2 text-[11px] text-white/40">
             <MapPin className="size-3" />
             {formatCoord(station.lat, station.lon)}
           </div>

@@ -3,7 +3,7 @@ import { Layer, Map, Source, type LayerProps, type MapRef } from '@vis.gl/react-
 import { MAP_STYLES, MapControls, LINE_MODES, type LineMode, type MapStyleId } from '@/components/MapControls'
 import { StationMark } from '@/components/StationMark'
 import { VehicleMark } from '@/components/VehicleMark'
-import { linesToGeoJSON, lineLabelsToGeoJSON, prepareMap } from './geo'
+import { linesToGeoJSON, lineLabelsToGeoJSON, headingToStop, prepareMap } from './geo'
 import { applyMapScene } from './mapScene'
 import type { Line, Vehicle } from './types'
 import { useVehicleMotion, VEHICLE_POLL_MS } from './useVehicleMotion'
@@ -128,7 +128,18 @@ function VehicleLayer({
   return (
     <>
       {marks.map((v) => (
-        <VehicleMark key={v.id} vehicle={v} heading={v.heading} />
+        <VehicleMark
+          key={v.id}
+          vehicle={v}
+          heading={v.heading}
+          nextStop={headingToStop(
+            v,
+            v.route,
+            v.direction_id,
+            v.current_status,
+            plot.stopsByRoute,
+          )}
+        />
       ))}
     </>
   )

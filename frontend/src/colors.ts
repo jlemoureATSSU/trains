@@ -38,6 +38,26 @@ export function darken(hex: string, amount = 0.45): string {
   return `#${to(r)}${to(g)}${to(b)}`
 }
 
+export function lighten(hex: string, amount = 0.4): string {
+  const n = hex.replace('#', '')
+  const r = parseInt(n.slice(0, 2), 16)
+  const g = parseInt(n.slice(2, 4), 16)
+  const b = parseInt(n.slice(4, 6), 16)
+  const mix = (c: number) =>
+    Math.round(c + (255 - c) * amount)
+      .toString(16)
+      .padStart(2, '0')
+  return `#${mix(r)}${mix(g)}${mix(b)}`
+}
+
+export function withAlpha(hex: string, alpha: number): string {
+  const n = hex.replace('#', '')
+  const r = parseInt(n.slice(0, 2), 16)
+  const g = parseInt(n.slice(2, 4), 16)
+  const b = parseInt(n.slice(4, 6), 16)
+  return `rgb(${r} ${g} ${b} / ${alpha})`
+}
+
 export function stationColors(lines: string[] | undefined): LineColor[] {
   const keys = new Set<SubwayColor>()
   let commuter = false
