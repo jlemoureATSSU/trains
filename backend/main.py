@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import get_settings
 from routers.lines import router as lines_router
+from routers.predictions import router as predictions_router
 from routers.stops import router as stops_router
 from routers.vehicles import router as vehicles_router
 from services.mbta import MbtaService
@@ -33,6 +34,7 @@ app.add_middleware(
 app.include_router(vehicles_router)
 app.include_router(stops_router)
 app.include_router(lines_router)
+app.include_router(predictions_router)
 
 
 @app.get("/")

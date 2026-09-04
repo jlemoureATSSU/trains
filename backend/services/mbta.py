@@ -8,6 +8,7 @@ from fastapi import HTTPException
 
 from config import Settings
 from schemas.line import Line, LinePoint
+from schemas.prediction import Prediction
 from schemas.stop import Station, Stop
 from schemas.vehicle import Vehicle
 
@@ -115,6 +116,30 @@ class MbtaService:
             )
         return lines
 
+    async def list_predictions(
+        self,
+        stop: str,
+        route: str | None = None,
+        direction_id: str | None = None,
+    ) -> list[Prediction]:
+        if not stop.strip():
+            raise HTTPException(status_code=400, detail="stop is required")
+        params: dict[str, str] = {
+            "filter[stop]": stop,
+            "include": "trip",
+            "sort": "departure_time",
+            "page[limit]": "100",
+        }
+        if route:
+            params["filter[route]"] = route
+        if direction_id is not None and direction_id != "":
+            params["filter[direction_id]"] = direction_id
+        payload = await self._get("/predictions", params)
+        included = _index_included(payload.get("included", []))
+        return [
+            parse_prediction(item, included) for item in payload.get("data", [])
+        ]
+
     async def _get(self, path: str, params: dict[str, str]) -> dict[str, Any]:
         try:
             response = await self._client.get(path, params=params)
@@ -168,8 +193,40 @@ def _trip_points(
         lon = attrs.get("longitude")
         if lat is None or lon is None:
             continue
-        points.append(LinePoint(name=attrs.get("name"), lat=lat, lon=lon))
+        points.append(
+            LinePoint(
+                id=stop_id,
+                parent_id=_rel_id(stop, "parent_station"),
+                name=attrs.get("name"),
+                lat=lat,
+                lon=lon,
+            )
+        )
     return points
+
+
+def parse_prediction(
+    item: dict[str, Any],
+    included: dict[tuple[str, str], dict[str, Any]],
+) -> Prediction:
+    attrs = item.get("attributes") or {}
+    trip_id = _rel_id(item, "trip")
+    trip = included.get(("trip", trip_id or ""))
+    trip_attrs = (trip or {}).get("attributes") or {}
+    return Prediction(
+        id=item["id"],
+        stop=_rel_id(item, "stop"),
+        route=_rel_id(item, "route"),
+        trip=trip_id,
+        vehicle=_rel_id(item, "vehicle"),
+        direction_id=attrs.get("direction_id"),
+        arrival_time=attrs.get("arrival_time"),
+        departure_time=attrs.get("departure_time"),
+        status=attrs.get("status"),
+        headsign=attrs.get("trip_headsign") or trip_attrs.get("headsign"),
+        stop_sequence=attrs.get("stop_sequence"),
+        schedule_relationship=attrs.get("schedule_relationship"),
+    )
 
 
 def parse_vehicle(item: dict[str, Any]) -> Vehicle:
