@@ -46,11 +46,6 @@ export type LatLon = {
   lon: number
 }
 
-export type Point = {
-  x: number
-  y: number
-}
-
 export type MapStation = {
   name: string
   lat: number
@@ -59,26 +54,13 @@ export type MapStation = {
   fromCr: boolean
 }
 
-export type PlottedStation = MapStation & Point
-
-export type PlottedPoint = LinePoint & Point
-
-export type PlottedLine = Omit<Line, 'points'> & {
-  points: PlottedPoint[]
-}
-
 export type Segment = {
-  ax: number
-  ay: number
-  bx: number
-  by: number
+  a: LatLon
+  b: LatLon
 }
 
 export type Plot = {
-  width: number
-  height: number
-  stations: PlottedStation[]
-  lines: PlottedLine[]
-  project: (point: LatLon) => Point
+  stations: MapStation[]
+  lines: Line[]
   segmentsByRoute: Map<string, Segment[]>
 }

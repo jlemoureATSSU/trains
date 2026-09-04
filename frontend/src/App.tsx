@@ -1,51 +1,93 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { Layer, Map, Marker, Source, type LayerProps } from '@vis.gl/react-maplibre'
 import { LINE_COLORS, darken, routeColor, stationColors } from './colors'
-import { projectPlot, snapToRoute } from './geo'
-import type { Line, PlottedStation, Point, Vehicle } from './types'
-import { usePanZoom } from './usePanZoom'
+import { linesToGeoJSON, prepareMap, snapToRoute } from './geo'
+import type { LatLon, Line, MapStation, Vehicle } from './types'
+import 'maplibre-gl/dist/maplibre-gl.css'
 import './App.css'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL
+const MAP_STYLE = 'https://tiles.openfreemap.org/styles/dark'
+const BOSTON = { longitude: -71.0589, latitude: 42.3601, zoom: 11 }
 
-function StationDot({ station }: { station: PlottedStation }) {
+const lineLayer: LayerProps = {
+  id: 'mbta-lines',
+  type: 'line',
+  layout: {
+    'line-cap': 'round',
+    'line-join': 'round',
+    'line-sort-key': ['-', 1, ['get', 'commuter']],
+  },
+  paint: {
+    'line-color': ['get', 'color'],
+    'line-width': [
+      'interpolate',
+      ['linear'],
+      ['zoom'],
+      8,
+      ['case', ['==', ['get', 'commuter'], 1], 1.2, 2.2],
+      14,
+      ['case', ['==', ['get', 'commuter'], 1], 2.5, 4],
+    ],
+    'line-opacity': 0.92,
+  },
+}
+
+function StationDot({ station }: { station: MapStation }) {
   const colors = stationColors(station.lines)
   if (colors.length === 0) return null
 
+  const rings = colors.length - 1
+  const r = 3.5 + rings * 2.5
+  const size = (r + 1.75) * 2
+
   return (
-    <g>
-      <title>{station.name}</title>
-      {[...colors].reverse().map((key, i) => {
-        const innermost = i === colors.length - 1
-        return (
-          <circle
-            key={key}
-            className={`dot dot--${colors.length - 1 - i}`}
-            cx={station.x}
-            cy={station.y}
-            fill={innermost ? LINE_COLORS[key] : 'none'}
-            stroke={innermost ? 'none' : LINE_COLORS[key]}
-          />
-        )
-      })}
-    </g>
+    <Marker longitude={station.lon} latitude={station.lat} anchor="center">
+      <svg
+        className="station"
+        width={size}
+        height={size}
+        viewBox={`${-size / 2} ${-size / 2} ${size} ${size}`}
+      >
+        <title>{station.name}</title>
+        {[...colors].reverse().map((key, i) => {
+          const innermost = i === colors.length - 1
+          const ring = colors.length - 1 - i
+          return (
+            <circle
+              key={key}
+              cx={0}
+              cy={0}
+              r={3.5 + ring * 2.5}
+              fill={innermost ? LINE_COLORS[key] : 'none'}
+              stroke={innermost ? 'none' : LINE_COLORS[key]}
+              strokeWidth={innermost ? 0 : 1.75}
+            />
+          )
+        })}
+      </svg>
+    </Marker>
   )
 }
 
-function VehicleMark({ vehicle }: { vehicle: Vehicle & Point }) {
+function VehicleMark({ vehicle }: { vehicle: Vehicle & LatLon }) {
   const color = routeColor(vehicle.route)
   return (
-    <g transform={`translate(${vehicle.x} ${vehicle.y})`}>
-      <title>
-        {vehicle.label || vehicle.id}
-        {vehicle.route ? ` · ${vehicle.route}` : ''}
-      </title>
-      <polygon
-        className="vehicle"
-        points="0,-1 0.866,0.5 -0.866,0.5"
-        fill={color}
-        stroke={darken(color)}
-      />
-    </g>
+    <Marker longitude={vehicle.lon} latitude={vehicle.lat} anchor="center">
+      <svg className="vehicle" width="14" height="14" viewBox="-7 -7 14 14">
+        <title>
+          {vehicle.label || vehicle.id}
+          {vehicle.route ? ` · ${vehicle.route}` : ''}
+        </title>
+        <polygon
+          points="0,-5.5 4.8,2.8 -4.8,2.8"
+          fill={color}
+          stroke={darken(color)}
+          strokeLinejoin="round"
+          strokeWidth="1.2"
+        />
+      </svg>
+    </Marker>
   )
 }
 
@@ -53,9 +95,8 @@ function App() {
   const [lines, setLines] = useState<Line[]>([])
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [error, setError] = useState<string | null>(null)
-  const plot = projectPlot(lines)
-  const { ref, view, panning, onPointerDown, onPointerMove, onPointerUp } =
-    usePanZoom(plot.width, plot.height)
+  const plot = useMemo(() => prepareMap(lines), [lines])
+  const lineGeoJSON = useMemo(() => linesToGeoJSON(plot.lines), [plot.lines])
 
   useEffect(() => {
     fetch(`${API_BASE}/lines`)
@@ -88,52 +129,50 @@ function App() {
     }
   }, [])
 
-  const vehicleMarks = vehicles
-    .filter(
-      (v): v is Vehicle & { latitude: number; longitude: number } =>
-        Number.isFinite(v.latitude) && Number.isFinite(v.longitude),
-    )
-    .map((v) => {
-      const pos = plot.project({ lat: v.latitude, lon: v.longitude })
-      return {
-        ...v,
-        ...snapToRoute(pos.x, pos.y, v.route, plot.segmentsByRoute),
-      }
-    })
+  const vehicleMarks = useMemo(
+    () =>
+      vehicles
+        .filter(
+          (v): v is Vehicle & { latitude: number; longitude: number } =>
+            Number.isFinite(v.latitude) && Number.isFinite(v.longitude),
+        )
+        .map((v) => {
+          const pos = snapToRoute(
+            { lat: v.latitude, lon: v.longitude },
+            v.route,
+            plot.segmentsByRoute,
+          )
+          return { ...v, ...pos }
+        }),
+    [vehicles, plot.segmentsByRoute],
+  )
 
   return (
     <main className="page">
       {error && <p className="status">Could not load lines: {error}</p>}
       {!error && lines.length === 0 && <p className="status">Loading…</p>}
-      {plot.stations.length > 0 && (
-        <svg
-          ref={ref}
-          className={`plot${panning ? ' is-panning' : ''}`}
-          viewBox={`0 0 ${plot.width} ${plot.height}`}
-          role="img"
-          aria-label="MBTA lines and stops"
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
+      <div className="map">
+        <Map
+          initialViewState={BOSTON}
+          mapStyle={MAP_STYLE}
+          projection="globe"
+          pitch={40}
+          bearing={0}
+          style={{ width: '100%', height: '100%' }}
         >
-          <g transform={`translate(${view.x} ${view.y}) scale(${view.k})`}>
-            {plot.lines.map((line) => (
-              <polyline
-                key={line.id}
-                className="line"
-                points={line.points.map((p) => `${p.x},${p.y}`).join(' ')}
-                stroke={line.color}
-              />
-            ))}
-            {plot.stations.map((s) => (
-              <StationDot key={s.name} station={s} />
-            ))}
-            {vehicleMarks.map((v) => (
-              <VehicleMark key={v.id} vehicle={v} />
-            ))}
-          </g>
-        </svg>
-      )}
+          {lineGeoJSON.features.length > 0 && (
+            <Source id="mbta-lines" type="geojson" data={lineGeoJSON}>
+              <Layer {...lineLayer} />
+            </Source>
+          )}
+          {plot.stations.map((s) => (
+            <StationDot key={s.name} station={s} />
+          ))}
+          {vehicleMarks.map((v) => (
+            <VehicleMark key={v.id} vehicle={v} />
+          ))}
+        </Map>
+      </div>
     </main>
   )
 }
